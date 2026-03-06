@@ -27,12 +27,12 @@ export default function Dashboard() {
   const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState(null);
   
-  // Form Sito: Niente URL, solo info strategiche
+  // Modulo B2B Richiesta Asset: Niente URL, focus su strategia
   const [siteForm, setSiteForm] = useState({ whereToPromote: '', goals: '' });
   
   const router = useRouter();
 
-  // Memoria Tab attiva
+  // Patch Anti-Crash e Memoria Tab (Risolve lo schermo nero dello screenshot 3)
   useEffect(() => {
     setIsMounted(true);
     const savedTab = localStorage.getItem('fp_active_tab');
@@ -58,7 +58,7 @@ export default function Dashboard() {
       try {
         const res = await fetch('https://api.ipify.org?format=json');
         const { ip } = await res.json();
-        // Aggiorna l'IP corrente. Il blocco di sicurezza vero e proprio avviene nella pagina Login
+        // Aggiorna l'IP corrente. Il blocco severo che sbatte fuori l'utente è in login/page.js
         if (profileData && profileData.last_ip !== ip) {
            await supabase.from('profiles').update({ last_ip: ip }).eq('id', user.id);
         }
@@ -78,19 +78,19 @@ export default function Dashboard() {
         });
       }
 
-      // Fetch Notifiche Push
+      // Estrazione Notifiche
       const { data: notifs } = await supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
       setNotifications(notifs || []);
 
-      // Fetch Offerte
+      // Estrazione Catalogo Offerte
       const { data: offersData } = await supabase.from('offers').select('*');
       setOffers(offersData || []);
 
-      // Fetch Conversioni
+      // Estrazione Feed Postback
       const { data: convData } = await supabase.from('conversions').select('*').eq('partner_id', user.id).order('created_at', { ascending: false });
       setConversions(convData || []);
 
-      // Calcolo Metriche
+      // Generazione Statistiche (Terminale Zero)
       const { count: totalClicks } = await supabase.from('clicks').select('*', { count: 'exact', head: true }).eq('affiliate_id', user.id);
       
       const convs = convData || [];
@@ -117,13 +117,13 @@ export default function Dashboard() {
   const handleGetLink = (offer, e) => {
     if (e) e.stopPropagation();
     if (profile?.traffic_status !== 'approved') {
-      alert("🔒 ACCESSO NEGATO\n\nSorgente di traffico non approvata. Vai in 'Asset & Sorgenti' per compilare la richiesta e sbloccare i link.");
+      alert("🔒 AZIONE NEGATA DAL SISTEMA COMPLIANCE\n\nLa tua sorgente di traffico non è stata approvata. Vai nella sezione 'Asset & Sorgenti' per compilare la richiesta e sbloccare la generazione dei link.");
       handleTabChange('assets'); 
       return;
     }
     const trackingLink = `${window.location.origin}/api/click?offer_id=${offer.id}&subid=${user.id}`;
     navigator.clipboard.writeText(trackingLink);
-    alert("🔗 Tracking Link Copiato negli appunti!");
+    alert("🔗 Tracking Link Copiato negli appunti!\nPronto per essere inserito nelle tue campagne.");
   };
 
   const markNotificationsAsRead = async () => {
@@ -137,21 +137,43 @@ export default function Dashboard() {
     }
   };
 
-  // Modulo Richiesta Sito B2B
+  const openOfferDetails = (offer) => {
+    setSelectedOffer(offer);
+    setIsOfferModalOpen(true);
+  };
+
+  const openSiteModal = (offer, e) => {
+    if (e) e.stopPropagation();
+    setSelectedOffer(offer);
+    setIsSiteModalOpen(true);
+  };
+
+  // Logica Invio Modulo Asset Web
   const handleRequestSiteSubmit = async (e) => {
     e.preventDefault();
     setSavingSettings(true);
+
+    const isSingleOffer = selectedOffer && selectedOffer.id;
+    const offerName = isSingleOffer ? selectedOffer.name : "HUB MULTI-OFFERTA (Intero Catalogo)";
+    
+    const trackingLinkToProvide = isSingleOffer 
+      ? `${window.location.origin}/api/click?offer_id=${selectedOffer.id}&subid=${user.id}`
+      : `L'utente necessita di un Hub Multilink. SubID utente: ${user.id}`;
+
+    const adminBriefing = `🎯 RICHIESTA ASSET: ${offerName}\n🔗 LINK S2S DA INSTALLARE NEL SITO: ${trackingLinkToProvide}\n📱 CANALI DI PROMOZIONE: ${siteForm.whereToPromote}\n💰 OBIETTIVI DICHIARATI: ${siteForm.goals}`;
+
     const { error } = await supabase.from('profiles').update({
       traffic_status: 'pending',
       traffic_volume: siteForm.goals,
-      traffic_notes: `Richiesta Sito per: ${selectedOffer.name} | Dove Promuove: ${siteForm.whereToPromote} | Obiettivi: ${siteForm.goals}`
+      traffic_notes: adminBriefing
     }).eq('id', user.id);
 
     setSavingSettings(false);
     if (!error) {
       setProfile({...profile, traffic_status: 'pending'});
       setIsSiteModalOpen(false);
-      alert("✅ Modulo inviato. Il team tecnico valuterà la tua richiesta e riceverai una notifica quando il sito sarà pronto.");
+      alert("✅ Candidatura tecnica inviata con successo all'Amministrazione.\n\nRiceverai una notifica push in Dashboard non appena la tua infrastruttura sarà online e i tuoi link saranno abilitati.");
+      setSiteForm({ whereToPromote: '', goals: '' });
     }
   };
 
@@ -163,7 +185,7 @@ export default function Dashboard() {
       const ibanRegex = /^[a-zA-Z]{2}[0-9a-zA-Z]{13,32}$/;
       const cleanIban = billing.payment_info.replace(/\s+/g, '').toUpperCase();
       if (!ibanRegex.test(cleanIban)) {
-        setSettingsMsg({ text: 'Formato IBAN non valido per l\'Area SEPA.', type: 'error' });
+        setSettingsMsg({ text: 'Formato IBAN non riconosciuto dai server SEPA.', type: 'error' });
         setSavingSettings(false); return;
       }
       billing.payment_info = cleanIban;
@@ -184,11 +206,11 @@ export default function Dashboard() {
       
     setSavingSettings(false);
     if (!error) {
-      setSettingsMsg({ text: 'Dati sincronizzati con il server centrale.', type: 'success' });
+      setSettingsMsg({ text: 'Record sincronizzati. In attesa di validazione manuale.', type: 'success' });
       setProfile({...profile, traffic_status: newTrafficStatus, kyc_status: newKycStatus, registered_website: cleanWebsite}); 
       setTimeout(() => setSettingsMsg({ text: '', type: '' }), 4000);
     } else {
-      setSettingsMsg({ text: 'Errore di crittografia.', type: 'error' });
+      setSettingsMsg({ text: 'Errore di connessione crittografata.', type: 'error' });
     }
   };
 
@@ -215,7 +237,7 @@ export default function Dashboard() {
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}} />
 
-      {/* HEADER MOBILE & NOTIFICHE */}
+      {/* HEADER NOTIFICHE (Campanellina) */}
       <div className="absolute top-4 right-4 z-50">
         <button onClick={markNotificationsAsRead} className="relative w-12 h-12 bg-white rounded-full shadow-md flex items-center justify-center text-xl hover:scale-105 transition-transform border border-slate-100">
           🔔
@@ -223,7 +245,10 @@ export default function Dashboard() {
         </button>
         {showNotifications && (
           <div className="absolute top-14 right-0 w-80 sm:w-96 bg-white border border-slate-200 shadow-2xl rounded-2xl overflow-hidden">
-            <div className="p-4 bg-slate-50 border-b border-slate-100 font-bold text-slate-800 uppercase tracking-widest text-xs">Centro Notifiche</div>
+            <div className="p-4 bg-slate-50 border-b border-slate-100 font-bold text-slate-800 uppercase tracking-widest text-xs flex justify-between">
+              <span>Centro Notifiche</span>
+              <button onClick={() => setShowNotifications(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
             <div className="max-h-80 overflow-y-auto p-2">
               {notifications.length === 0 ? <p className="p-6 text-xs text-slate-500 text-center uppercase font-bold tracking-widest">Nessuna comunicazione</p> : notifications.map(n => (
                 <div key={n.id} className={`p-4 mb-2 rounded-xl text-sm ${n.is_read ? 'bg-white opacity-60' : 'bg-blue-50 border border-blue-100'}`}>
@@ -258,10 +283,10 @@ export default function Dashboard() {
         </div>
         
         <div className="mt-auto p-5 bg-slate-50 rounded-2xl border border-slate-100 mb-4 text-center shadow-inner">
-          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Assistenza Network</p>
+          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Assistenza Diretta</p>
           <a href="mailto:gabrielecrestini45@gmail.com" className="text-xs font-bold text-blue-600 break-words hover:underline">gabrielecrestini45@gmail.com</a>
         </div>
-        <button onClick={handleLogout} className="text-xs font-bold text-slate-500 hover:text-slate-800 py-3 uppercase tracking-widest transition-colors w-full">Disconnetti</button>
+        <button onClick={handleLogout} className="text-xs font-bold text-slate-500 hover:text-slate-800 py-3 uppercase tracking-widest transition-colors w-full">Disconnetti Utenza</button>
       </aside>
 
       {/* --- HEADER MOBILE --- */}
@@ -287,16 +312,16 @@ export default function Dashboard() {
             <div className="space-y-8">
               <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">Pannello di Controllo</h1>
               
-              {/* Box Link Assegnato (Sito Pronto) */}
+              {/* Box Sito Assegnato (Se l'admin ha inviato il link) */}
               {profile?.assigned_site_link && (
                 <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-8 rounded-3xl shadow-xl text-white flex flex-col md:flex-row items-center justify-between gap-6 border border-blue-500/30">
                   <div>
-                    <h3 className="text-xl font-bold mb-2 flex items-center gap-2">🚀 La tua Infrastruttura è Pronta!</h3>
-                    <p className="text-sm text-blue-100 leading-relaxed">Il team tecnico ha rilasciato il tuo asset. Puoi iniziare a promuovere usando questo link.</p>
+                    <h3 className="text-xl font-bold mb-2 flex items-center gap-2">🚀 La tua Infrastruttura è Operativa!</h3>
+                    <p className="text-sm text-blue-100 leading-relaxed">Il team tecnico ha rilasciato il tuo asset. Copia questo link e inseriscilo nelle tue campagne promozionali.</p>
                   </div>
                   <div className="flex flex-col gap-3 w-full md:w-auto shrink-0">
                     <input type="text" readOnly value={profile.assigned_site_link} className="bg-black/20 border border-white/20 text-white px-5 py-3 rounded-xl font-mono text-sm w-full outline-none focus:border-white/40 transition-colors" />
-                    <button onClick={() => {navigator.clipboard.writeText(profile.assigned_site_link); alert("🔗 Link Copiato! Buon lavoro.");}} className="bg-white text-blue-600 font-bold px-6 py-3.5 rounded-xl hover:bg-blue-50 transition-colors shadow-md active:scale-95 uppercase tracking-widest text-xs">Copia Link Ufficiale</button>
+                    <button onClick={() => {navigator.clipboard.writeText(profile.assigned_site_link); alert("🔗 Link Ufficiale Copiato! Buon lavoro e buona scalata.");}} className="bg-white text-blue-600 font-bold px-6 py-3.5 rounded-xl hover:bg-blue-50 transition-colors shadow-md active:scale-95 uppercase tracking-widest text-xs">Copia Link Ufficiale</button>
                   </div>
                 </div>
               )}
@@ -305,7 +330,7 @@ export default function Dashboard() {
                 <div className="light-panel p-6 sm:p-8 rounded-[1.5rem]"><span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Saldo Netto</span><p className="text-3xl sm:text-4xl font-black text-slate-900 mt-2">€{profile?.wallet_approved?.toFixed(2)}</p></div>
                 <div className="light-panel p-6 sm:p-8 rounded-[1.5rem]"><span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">In Valutazione</span><p className="text-3xl sm:text-4xl font-black text-amber-500 mt-2">€{profile?.wallet_pending?.toFixed(2)}</p></div>
                 <div className="light-panel p-6 sm:p-8 rounded-[1.5rem]"><span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Conv. Rate</span><p className="text-3xl sm:text-4xl font-black text-blue-500 mt-2">{stats.cr.toFixed(2)}%</p></div>
-                <div className="light-panel p-6 sm:p-8 rounded-[1.5rem]"><span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">EPC Rete</span><p className="text-3xl sm:text-4xl font-black text-emerald-500 mt-2">€{stats.epc.toFixed(2)}</p></div>
+                <div className="light-panel p-6 sm:p-8 rounded-[1.5rem]"><span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">EPC Totale</span><p className="text-3xl sm:text-4xl font-black text-emerald-500 mt-2">€{stats.epc.toFixed(2)}</p></div>
               </div>
 
               <div className="light-panel rounded-[2rem] p-8">
@@ -317,7 +342,7 @@ export default function Dashboard() {
                     {conversions.slice(0, 5).map((conv) => (
                       <div key={conv.id} className="flex justify-between items-center pb-4 border-b border-slate-50 last:border-0 group">
                         <div>
-                          <p className="text-sm font-bold text-slate-800">{conv.program_id || 'Offerta Nascosta'}</p>
+                          <p className="text-sm font-bold text-slate-800">{conv.program_id || 'Programma Sconosciuto'}</p>
                           <p className="text-[10px] font-mono text-slate-400 mt-1">{new Date(conv.created_at).toLocaleDateString()}</p>
                         </div>
                         <div className="text-right">
@@ -347,13 +372,13 @@ export default function Dashboard() {
                         </div>
                         <div>
                           <h4 className="font-black text-slate-900 text-xl sm:text-2xl line-clamp-1">{offer.name}</h4>
-                          <button onClick={() => {setSelectedOffer(offer); setIsOfferModalOpen(true);}} className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-widest mt-1.5 flex items-center gap-1">Scheda Regole ➔</button>
+                          <button onClick={() => {setSelectedOffer(offer); setIsOfferModalOpen(true);}} className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-widest mt-1.5 flex items-center gap-1">Scheda e Regole ➔</button>
                         </div>
                       </div>
 
                       <div className="mt-auto border-t border-slate-100 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
                         <div className="bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100 w-full sm:w-auto text-center sm:text-left">
-                          <p className="text-[9px] uppercase font-bold text-slate-400 tracking-widest mb-1">Commissione</p>
+                          <p className="text-[9px] uppercase font-bold text-slate-400 tracking-widest mb-1">Commissione Netta</p>
                           <p className="font-black text-emerald-500 text-2xl">€{offer.partner_payout?.toFixed(2)}</p>
                         </div>
                         <div className="flex w-full sm:w-auto gap-2">
@@ -363,7 +388,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                   ))}
-                  {offers.length === 0 && <p className="text-slate-500 font-bold uppercase tracking-widest text-xs col-span-full text-center py-20">Database in aggiornamento...</p>}
+                  {offers.length === 0 && <p className="text-slate-500 font-bold uppercase tracking-widest text-xs col-span-full text-center py-20">Sincronizzazione Database in corso...</p>}
                 </div>
              </div>
           )}
@@ -371,20 +396,20 @@ export default function Dashboard() {
           {/* VISTA 3: ASSET E SORGENTI */}
           {activeTab === 'assets' && (
             <div className="space-y-8 max-w-4xl">
-              <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">Sorgenti di Traffico</h1>
+              <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">Sorgenti di Acquisizione</h1>
               
               <div className="light-panel p-8 sm:p-10 rounded-[2rem]">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 border-b border-slate-100 pb-6">
                   <div>
-                    <h2 className="text-xl font-bold text-slate-900">1. Collega la tua Sorgente</h2>
-                    <p className="text-xs text-slate-500 mt-1">Dichiara il tuo sito o profilo per sbloccare i tracking link nativi.</p>
+                    <h2 className="text-xl font-bold text-slate-900">1. Collega la tua Sorgente (Indipendente)</h2>
+                    <p className="text-xs text-slate-500 mt-1">Dichiara il tuo sito o profilo per sbloccare i tracking link nativi dal Marketplace.</p>
                   </div>
                   <StatusBadge status={profile?.traffic_status} />
                 </div>
 
                 <div className="space-y-5 bg-slate-50 p-6 rounded-2xl border border-slate-100">
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">URL Ufficiale (Sito, Pagina IG, Canale TG)</label>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">URL Ufficiale (Sito Web, Pagina IG, Canale TG)</label>
                     <input type="url" value={billing.registered_website} onChange={(e) => setBilling({...billing, registered_website: e.target.value})} disabled={profile?.traffic_status === 'approved' || profile?.traffic_status === 'pending'} className="data-input text-sm font-mono text-blue-600 disabled:opacity-50 disabled:bg-slate-200" placeholder="https://..." />
                   </div>
                   <div>
@@ -401,17 +426,20 @@ export default function Dashboard() {
 
                 {profile?.traffic_status === 'pending' && profile?.traffic_notes && (
                   <div className="mt-8 p-6 rounded-2xl border border-amber-200 bg-amber-50">
-                    <h3 className="text-sm font-bold text-amber-800 mb-2 flex items-center gap-2">⏳ Creazione Asset in Corso</h3>
+                    <h3 className="text-sm font-bold text-amber-800 mb-2 flex items-center gap-2">⏳ Briefing in Lavorazione</h3>
                     <p className="text-xs text-amber-900/80 leading-relaxed font-mono bg-white p-4 rounded-xl border border-amber-100">{profile.traffic_notes}</p>
                   </div>
                 )}
               </div>
 
               <div className="light-panel p-8 sm:p-10 rounded-[2rem] border border-blue-100">
-                <h2 className="text-xl font-bold text-slate-900 mb-2">2. Richiedi Creazione Sito</h2>
-                <p className="text-sm text-slate-600 mb-6">Non hai un sito idoneo? Il nostro team di sviluppatori creerà un'infrastruttura ad alta conversione per te.</p>
-                <button onClick={() => {setSelectedOffer({name: 'Richiesta Asset Generica'}); setIsSiteModalOpen(true);}} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-widest px-8 py-4 rounded-xl shadow-lg shadow-blue-500/30 transition-all active:scale-95">
-                  Compila Modulo Tecnico
+                <div className="flex justify-between items-start mb-2">
+                  <h2 className="text-xl font-bold text-slate-900">2. Richiedi Creazione Infrastruttura</h2>
+                  <span className="bg-indigo-100 text-indigo-700 font-bold px-3 py-1 rounded-full text-[9px] uppercase tracking-widest">Hub Disponibile</span>
+                </div>
+                <p className="text-sm text-slate-600 mb-6 leading-relaxed">Non hai un sito idoneo? Il nostro team di sviluppatori costruirà un'infrastruttura ad alta conversione per te. Puoi richiedere un sito per una campagna specifica (dal Marketplace) oppure un <strong>Hub Multi-Offerta</strong> generico che le contenga tutte.</p>
+                <button onClick={() => {setSelectedOffer(null); setIsSiteModalOpen(true);}} className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase tracking-widest px-8 py-4 rounded-xl shadow-lg shadow-blue-500/30 transition-all active:scale-95">
+                  Richiedi Hub Multi-Offerta
                 </button>
               </div>
             </div>
@@ -426,7 +454,7 @@ export default function Dashboard() {
                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 border-b border-slate-100 pb-6">
                    <div>
                      <h2 className="text-xl font-bold text-slate-900">Coordinate per Bonifici SEPA</h2>
-                     <p className="text-xs text-slate-500 mt-1">Dati necessari per l'emissione dei pagamenti e documentazione fiscale.</p>
+                     <p className="text-xs text-slate-500 mt-1">Dati necessari per l'emissione dei pagamenti (Ricevute o Fatture).</p>
                    </div>
                    <StatusBadge status={profile?.kyc_status} />
                  </div>
@@ -458,7 +486,7 @@ export default function Dashboard() {
                     </div>
                     
                     <div className="sm:col-span-2 mt-4 pt-6 border-t border-slate-200">
-                      <label className="block text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-2">IBAN di Accredito (Solo Area SEPA)</label>
+                      <label className="block text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-2">IBAN di Accredito (Area SEPA)</label>
                       <input type="text" value={billing.payment_info} onChange={(e) => setBilling({...billing, payment_info: e.target.value.toUpperCase()})} disabled={profile?.kyc_status === 'approved'} className="data-input text-base font-mono uppercase tracking-[0.1em] border-blue-200 focus:border-blue-500 disabled:opacity-50 disabled:bg-slate-200 bg-white" placeholder="IT00X00000000000000000" />
                     </div>
                   </div>
@@ -466,7 +494,7 @@ export default function Dashboard() {
                   {(!profile?.kyc_status || profile?.kyc_status === 'none' || profile?.kyc_status === 'pending') && (
                     <div className="pt-2">
                       <button onClick={handleSaveSettings} disabled={savingSettings || profile?.kyc_status === 'approved'} className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs px-12 py-4 rounded-xl transition-all shadow-lg active:scale-95 uppercase tracking-widest disabled:opacity-50">
-                        {savingSettings ? 'Crittografia...' : 'Salva & Invia al Team'}
+                        {savingSettings ? 'Crittografia in corso...' : 'Salva Dati e Invia Fisco'}
                       </button>
                     </div>
                   )}
@@ -494,32 +522,34 @@ export default function Dashboard() {
         </div>
       </nav>
 
-      {/* MODALE RICHIESTA SITO (SENZA URL, CON REGOLE E DIVIETI) */}
+      {/* MODALE RICHIESTA SITO (SENZA URL, CON POLICY RIGIDE E LINK AUTO-GENERATO PER L'ADMIN) */}
       {isSiteModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-view">
           <div className="bg-white border border-slate-100 p-8 sm:p-10 rounded-[2.5rem] max-w-lg w-full shadow-2xl relative overflow-hidden">
-            <h2 className="text-2xl font-black text-slate-900 mb-2">Creazione Asset Web</h2>
-            <p className="text-sm text-slate-500 mb-6 leading-relaxed">Briefing tecnico per la campagna <strong className="text-slate-800">{selectedOffer?.name}</strong>. Il team ti invierà una notifica appena il sito sarà online.</p>
+            <h2 className="text-2xl font-black text-slate-900 mb-2">Deploy Infrastruttura Web</h2>
+            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+              Briefing tecnico per: <strong className="text-slate-800">{selectedOffer ? selectedOffer.name : "Hub Multi-Offerta (Tutte le campagne)"}</strong>. Compila con attenzione, il nostro team analizzerà la tua richiesta.
+            </p>
             
             <form onSubmit={handleRequestSiteSubmit} className="space-y-5 relative z-10">
               <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Canali e Angolo di Promozione</label>
-                <textarea required rows="3" value={siteForm.whereToPromote} onChange={(e) => setSiteForm({...siteForm, whereToPromote: e.target.value})} className="data-input resize-none" placeholder="Es. Userò una pagina Instagram da 50k follower e farò Meta Ads con creatività focalizzate sul risparmio..."></textarea>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Canali e Strategia di Promozione</label>
+                <textarea required rows="3" value={siteForm.whereToPromote} onChange={(e) => setSiteForm({...siteForm, whereToPromote: e.target.value})} className="data-input resize-none" placeholder="Es. Userò una pagina Instagram da 50k follower e farò Meta Ads con creatività focalizzate sul risparmio mensile..."></textarea>
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Obiettivi Stimati (Budget o Conversioni)</label>
-                <input type="text" required value={siteForm.goals} onChange={(e) => setSiteForm({...siteForm, goals: e.target.value})} className="data-input" placeholder="Es. 100 Lead al mese / Budget 50€ al giorno" />
+                <input type="text" required value={siteForm.goals} onChange={(e) => setSiteForm({...siteForm, goals: e.target.value})} className="data-input" placeholder="Es. 100 Lead al mese o Budget 50€/giorno" />
               </div>
               
               <div className="bg-rose-50 border border-rose-200 p-5 rounded-2xl">
-                <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-2 flex items-center gap-2"><span className="text-base">⚠️</span> Policy di Rete</p>
-                <p className="text-xs text-rose-800 font-medium leading-relaxed">Accettando la creazione, ti impegni in modo trasparente a rispettare le restrizioni della banca. Traffico incentivato, finte promesse o Brand Bidding porteranno al ban e allo storno di tutti i guadagni generati.</p>
+                <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest mb-2 flex items-center gap-2"><span className="text-base">⚠️</span> Policy di Rete (Pena Storno)</p>
+                <p className="text-xs text-rose-800 font-medium leading-relaxed">Accettando la creazione, ti impegni in modo trasparente a rispettare le restrizioni della banca. Traffico incentivato, finte promesse, click forzati o Brand Bidding porteranno all'immediato blocco dell'account e allo storno di tutti i guadagni generati.</p>
               </div>
 
               <div className="flex gap-3 pt-4">
                 <button type="button" onClick={() => setIsSiteModalOpen(false)} className="flex-1 text-xs font-bold uppercase tracking-widest text-slate-600 bg-slate-100 hover:bg-slate-200 py-4 rounded-xl transition-colors">Annulla</button>
                 <button type="submit" disabled={savingSettings} className="flex-[2] text-xs font-bold uppercase tracking-widest text-white bg-blue-600 hover:bg-blue-700 py-4 rounded-xl shadow-lg transition-all active:scale-95 disabled:opacity-50">
-                  {savingSettings ? 'Invio...' : 'Invia Richiesta'}
+                  {savingSettings ? 'Invio...' : 'Sottoponi Richiesta'}
                 </button>
               </div>
             </form>
@@ -540,7 +570,7 @@ export default function Dashboard() {
                   <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">{selectedOffer.name}</h2>
                   <div className="flex gap-2 mt-2">
                     <span className="text-[9px] font-bold border border-slate-200 text-slate-500 px-3 py-1 rounded-lg uppercase tracking-widest">Modello {selectedOffer.payout_type || 'CPA'}</span>
-                    <span className="text-[9px] font-bold border border-emerald-200 text-emerald-700 bg-emerald-50 px-3 py-1 rounded-lg uppercase tracking-widest">Payout: €{selectedOffer.partner_payout?.toFixed(2)}</span>
+                    <span className="text-[9px] font-bold border border-emerald-200 text-emerald-700 bg-emerald-50 px-3 py-1 rounded-lg uppercase tracking-widest">Margine: €{selectedOffer.partner_payout?.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
