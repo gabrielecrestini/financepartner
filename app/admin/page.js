@@ -9,7 +9,7 @@ export default function AdminDashboard() {
   const [profiles, setProfiles] = useState([]);
   const [offers, setOffers] = useState([]); 
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('network'); 
+  const [activeTab, setActiveTab] = useState('sites'); // Impostato su 'sites' per farti vedere subito la modifica
   
   const [siteLinks, setSiteLinks] = useState({});
 
@@ -185,7 +185,7 @@ export default function AdminDashboard() {
       <main className="flex-1 p-8 overflow-y-auto relative z-10">
         <div className="max-w-[1200px] mx-auto">
           
-          {/* TAB 1: AFFILIATI E INSERIMENTO VENDITE (AGGIORNATO) */}
+          {/* TAB 1: AFFILIATI E INSERIMENTO VENDITE */}
           {activeTab === 'network' && (
             <div className="space-y-6">
               <div className="border-b border-white/10 pb-6">
@@ -248,14 +248,27 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* TAB: SITI WEB */}
+          {/* TAB: SITI WEB - AGGIORNATA CON SUBID IN EVIDENZA */}
           {activeTab === 'sites' && (
             <div className="space-y-6">
               <h1 className="text-3xl font-black text-white uppercase border-b border-white/10 pb-6">Deploy Infrastrutture</h1>
               {pendingSites.length === 0 ? <p className="text-slate-500 uppercase tracking-widest text-sm">Nessun sito da creare.</p> : pendingSites.map(p => (
                 <div key={p.id} className="admin-panel p-6 rounded-2xl border-l-4 border-l-blue-500 grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
                   <div>
-                    <p className="text-[10px] font-mono text-slate-500 mb-2">Cliente: <span className="text-white font-bold">{p.email}</span></p>
+                    <p className="text-[10px] font-mono text-slate-500 mb-1">Cliente: <span className="text-white font-bold">{p.email}</span></p>
+                    
+                    {/* BOX SUBID IN EVIDENZA */}
+                    <div className="mb-4 inline-flex items-center gap-3 bg-blue-500/10 border border-blue-500/30 px-3 py-1.5 rounded-lg">
+                      <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">SUB-ID UTENTE:</span>
+                      <span className="text-xs font-mono text-white">{p.id}</span>
+                      <button 
+                        onClick={() => {navigator.clipboard.writeText(p.id); alert("SubID Copiato!");}} 
+                        className="text-[9px] bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded transition-colors uppercase font-bold"
+                      >
+                        Copia
+                      </button>
+                    </div>
+
                     <div className="bg-black/40 border border-white/5 p-5 rounded-xl">
                        <p className="text-xs text-blue-300 font-mono whitespace-pre-wrap">{p.traffic_notes}</p>
                     </div>
