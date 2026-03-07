@@ -2,9 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
 // 1. Inizializzazione di Supabase 
-// Le variabili vengono prese in automatico dal tuo file .env
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-// Usiamo la Service Role Key perché questa è una rotta server sicura
+// Usiamo la Service Role Key per scavalcare le regole RLS essendo un'API Server-side
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -13,123 +12,143 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
 
-    // 2. Lettura dei parametri inviati da financeAds nell'URL
-    // Esempio in arrivo: ?subid=USER_UUID&status=open&program=80001C110660650T
+    // 2. Lettura dei parametri.
+    // L'URL che FinanceAds chiamerà sarà tipo: ?subid=USER_UUID&status=confirmed&program=eToro&payout=150
     const subid = searchParams.get('subid');
-    const status = searchParams.get('status'); // Può essere 'open', 'confirmed', o 'rejected'
-    const programId = searchParams.get('program');
+    const rawStatus = searchParams.get('status') || '';
+    const programName = searchParams.get('program') || 'Campagna Finanziaria'; 
+    const receivedPayout = searchParams.get('payout'); 
 
-    // Controllo di sicurezza: se mancano i dati, blocca tutto
-    if (!subid || !status || !programId) {
-      return NextResponse.json({ error: 'Parametri mancanti dal Postback' }, { status: 400 });
+    // Normalizziamo lo status per evitare problemi di maiuscole/minuscole
+    const status = rawStatus.toLowerCase();
+
+    // Sicurezza: blocchiamo richieste vuote o test di FinanceAds con le macro non compilate
+    if (!subid || subid === '{subid}' || subid === '[SUBID]') {
+      return NextResponse.json({ error: 'SubID mancante o invalido (Macro non compilata)' }, { status: 400 });
     }
 
-    // 3. Cerca l'offerta nel DB per sapere quanto pagare il tuo collaboratore
-    const { data: offer, error: offerError } = await supabase
-      .from('offers')
-      .select('partner_payout')
-      .eq('program_id', programId)
-      .single();
+    // 3. Determina la quota da pagare al partner.
+    // Se FinanceAds ci ha inviato il payout (es. payout=50), usiamo quello.
+    // Altrimenti, proviamo a cercarlo nel nostro database tramite il nome del programma.
+    let quotaPartner = parseFloat(receivedPayout);
 
-    if (offerError || !offer) {
-      return NextResponse.json({ error: 'Offerta non trovata o non configurata' }, { status: 404 });
+    if (isNaN(quotaPartner) || quotaPartner <= 0) {
+       // Se l'importo non è nell'URL, lo cerchiamo nel DB
+       const { data: offer } = await supabase
+         .from('offers')
+         .select('partner_payout')
+         .ilike('name', `%${programName}%`) // Cerca un'offerta che contiene quel nome
+         .limit(1)
+         .single();
+       
+       if (offer) {
+         quotaPartner = Number(offer.partner_payout);
+       } else {
+         quotaPartner = 0; // Fallback di sicurezza
+       }
     }
 
-    const quotaPartner = Number(offer.partner_payout);
-
-    // 4. Esecuzione delle azioni in base allo stato della banca
-    if (status === 'open') {
+    // 4. Esecuzione delle azioni sui Portafogli in base allo STATO
+    
+    if (status === 'open' || status === 'pending') {
       
-      // L'utente ha appena fatto l'azione. Creiamo la conversione "In attesa"
+      // A. L'utente ha generato un Lead "In Attesa"
       const { error: insertError } = await supabase
         .from('conversions')
         .insert({
           partner_id: subid,
-          program_id: programId,
+          program_id: programName,
           amount: quotaPartner,
           status: 'pending'
         });
 
       if (insertError) throw insertError;
 
-      // Leggi il profilo e aggiungi i soldi al saldo "In Attesa"
+      // Aggiungi soldi al saldo "In Attesa"
       const { data: profile } = await supabase.from('profiles').select('wallet_pending').eq('id', subid).single();
       if (profile) {
-        await supabase
-          .from('profiles')
-          .update({ wallet_pending: Number(profile.wallet_pending) + quotaPartner })
-          .eq('id', subid);
+        await supabase.from('profiles').update({ wallet_pending: Number(profile.wallet_pending) + quotaPartner }).eq('id', subid);
       }
 
-    } else if (status === 'confirmed') {
+      // Notifica l'affiliato
+      await supabase.from('notifications').insert([{ 
+        user_id: subid, title: '⏳ Lead in Valutazione', 
+        message: `L'istituto bancario sta verificando una nuova conversione per ${programName} (Potenziale: €${quotaPartner.toFixed(2)}).`, type: 'info' 
+      }]);
+
+    } else if (status === 'confirmed' || status === 'approved') {
       
-      // FinanceAds ha pagato TE. Troviamo la conversione "In attesa" del collaboratore...
+      // B. La Banca ha APPROVATO la conversione (FinanceAds paga te, tu paghi l'affiliato)
+      // Cerchiamo se esiste già la conversione "pending" per aggiornarla
       const { data: pendingConv } = await supabase
         .from('conversions')
         .select('id')
         .eq('partner_id', subid)
-        .eq('program_id', programId)
+        .eq('program_id', programName)
         .eq('status', 'pending')
         .limit(1)
         .single();
 
       if (pendingConv) {
-        // ...e la passiamo in "Approvata"
-        await supabase
-          .from('conversions')
-          .update({ status: 'approved', updated_at: new Date().toISOString() })
-          .eq('id', pendingConv.id);
-
-        // Spostiamo i soldi: li togliamo dal "pending" e li mettiamo in "approved" (Prelevabili)
+        // Aggiorna la conversione esistente
+        await supabase.from('conversions').update({ status: 'approved', amount: quotaPartner, updated_at: new Date().toISOString() }).eq('id', pendingConv.id);
+        
+        // Sposta i soldi da Pending ad Approved
         const { data: profile } = await supabase.from('profiles').select('wallet_pending, wallet_approved').eq('id', subid).single();
         if (profile) {
-          await supabase
-            .from('profiles')
-            .update({
-              wallet_pending: Math.max(0, Number(profile.wallet_pending) - quotaPartner), // Math.max evita che vada in negativo
+          await supabase.from('profiles').update({
+              wallet_pending: Math.max(0, Number(profile.wallet_pending) - quotaPartner),
               wallet_approved: Number(profile.wallet_approved) + quotaPartner
-            })
-            .eq('id', subid);
+            }).eq('id', subid);
+        }
+      } else {
+        // Se per qualche motivo FinanceAds manda direttamente 'confirmed' senza passare per 'open', la creiamo da zero
+        await supabase.from('conversions').insert({ partner_id: subid, program_id: programName, amount: quotaPartner, status: 'approved' });
+        
+        // Aggiungiamo direttamente i soldi in Approved
+        const { data: profile } = await supabase.from('profiles').select('wallet_approved').eq('id', subid).single();
+        if (profile) {
+          await supabase.from('profiles').update({ wallet_approved: Number(profile.wallet_approved) + quotaPartner }).eq('id', subid);
         }
       }
 
-    } else if (status === 'rejected') {
+      // Notifica trionfale all'affiliato
+      await supabase.from('notifications').insert([{ 
+        user_id: subid, title: '💶 Commissione Liquidabile (S2S)', 
+        message: `La conversione per ${programName} è stata validata. Sono stati aggiunti €${quotaPartner.toFixed(2)} al tuo saldo esigibile.`, type: 'success' 
+      }]);
+
+    } else if (status === 'rejected' || status === 'cancelled') {
       
-      // La banca ha rifiutato l'utente (es. documenti falsi o duplicato)
+      // C. La Banca ha RIFIUTATO il Lead
       const { data: pendingConv } = await supabase
-        .from('conversions')
-        .select('id')
-        .eq('partner_id', subid)
-        .eq('program_id', programId)
-        .eq('status', 'pending')
-        .limit(1)
-        .single();
+        .from('conversions').select('id').eq('partner_id', subid).eq('program_id', programName).eq('status', 'pending')
+        .limit(1).single();
 
       if (pendingConv) {
-         // Cambiamo lo stato in "Rifiutata"
-         await supabase
-           .from('conversions')
-           .update({ status: 'rejected', updated_at: new Date().toISOString() })
-           .eq('id', pendingConv.id);
+         // Aggiorna log
+         await supabase.from('conversions').update({ status: 'rejected', updated_at: new Date().toISOString() }).eq('id', pendingConv.id);
          
-         // Sottraiamo i soldi dal saldo in attesa per pulire il portafoglio
+         // Togli i soldi dal saldo in attesa
          const { data: profile } = await supabase.from('profiles').select('wallet_pending').eq('id', subid).single();
          if (profile) {
-           await supabase
-             .from('profiles')
-             .update({
-               wallet_pending: Math.max(0, Number(profile.wallet_pending) - quotaPartner)
-             })
-             .eq('id', subid);
+           await supabase.from('profiles').update({ wallet_pending: Math.max(0, Number(profile.wallet_pending) - quotaPartner) }).eq('id', subid);
          }
       }
+
+      // Avvisa l'affiliato dello storno
+      await supabase.from('notifications').insert([{ 
+        user_id: subid, title: '⛔ Traffico Rifiutato', 
+        message: `Purtroppo una conversione per ${programName} non ha superato i controlli di qualità della banca ed è stata stornata.`, type: 'error' 
+      }]);
     }
 
-    // 5. Risposta a financeAds: "Tutto Ricevuto Perfettamente"
-    return NextResponse.json({ success: true, message: 'Automazione Postback completata' });
+    // 5. Risposta a FinanceAds: "Tutto Ricevuto Perfettamente" (Status 200)
+    return NextResponse.json({ success: true, message: 'Automazione Postback completata con successo' });
 
   } catch (error) {
-    console.error('Errore nel sistema S2S:', error);
-    return NextResponse.json({ error: 'Errore interno del server' }, { status: 500 });
+    console.error('Errore Critico nel Postback S2S:', error);
+    // Rispondiamo comunque con 200 a FinanceAds per evitare che ri-invii gli stessi dati all'infinito intasando il server
+    return NextResponse.json({ success: false, error: 'Errore interno catturato' }, { status: 200 });
   }
 }
