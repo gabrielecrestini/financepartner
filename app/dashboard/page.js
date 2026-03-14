@@ -38,8 +38,8 @@ export default function Dashboard() {
   const [animKey, setAnimKey] = useState(0); 
   const [loading, setLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
-  const [securityLock, setSecurityLock] = useState(false); // NUOVO: Blocco IP
-  const [detectedIp, setDetectedIp] = useState(''); // NUOVO: IP Rilevato
+  const [securityLock, setSecurityLock] = useState(false); // Blocco Dispositivo Sconosciuto
+  const [detectedIp, setDetectedIp] = useState(''); // IP Estetico per mostrare da dove viene l'intrusione
   
   const mainContentRef = useRef(null);
 
@@ -84,32 +84,24 @@ export default function Dashboard() {
 
       const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       
-      let isNewDevice = false;
-
-      // MOTORE DI CONTROLLO IP (TELEGRAM STYLE)
+      // MOTORE DI RICONOSCIMENTO DISPOSITIVO LOCALE (Fingerprinting Base)
+      const isDeviceAuthorized = localStorage.getItem('fp_device_auth_v1');
+      
+      // Recuperiamo comunque l'IP in modo silenzioso solo per farlo vedere nell'avviso se c'è un'intrusione
       try {
         const res = await fetch('https://api.ipify.org?format=json');
         const { ip } = await res.json();
         setDetectedIp(ip);
+      } catch (e) { setDetectedIp('Sconosciuto (IP Nascosto)'); }
 
-        if (profileData) {
-          if (!profileData.last_ip) {
-             // Primo accesso in assoluto, salva l'IP silenziosamente
-             await supabase.from('profiles').update({ last_ip: ip }).eq('id', user.id);
-          } else if (profileData.last_ip !== ip) {
-             // NUOVO IP RILEVATO! Scatta il blocco di sicurezza
-             isNewDevice = true;
-          }
-        }
-      } catch (e) { console.log("Controllo IP Bypassato (AdBlocker/Firewall)"); }
-
-      if (isNewDevice) {
+      if (!isDeviceAuthorized && profileData?.traffic_status === 'approved') {
+        // Se il dispositivo non ha il "biscottino" locale, facciamo scattare il Terminale Rosso
         setSecurityLock(true);
       }
 
       setProfile(profileData);
       
-      // Carichiamo comunque i dati in background così quando sblocca l'IP è tutto pronto senza caricamenti
+      // Carichiamo i dati in background
       if (profileData?.traffic_status === 'approved') {
         setBilling({ full_name: profileData.full_name || '', entity_type: profileData.entity_type || 'privato', vat_number: profileData.vat_number || '', tax_id: profileData.tax_id || '', address: profileData.address || '', payment_info: profileData.payment_info || '', registered_website: profileData.registered_website || '', traffic_volume: profileData.traffic_volume || '' });
 
@@ -144,7 +136,8 @@ export default function Dashboard() {
         });
         setChartData(dailyData);
 
-        if (totalClicks === 0 && !profileData.assigned_site_link && !isNewDevice) {
+        // Mostra popup onboarding se non l'ha mai visto (e se non ha il blocco sicurezza attivo)
+        if (totalClicks === 0 && !profileData.assigned_site_link && isDeviceAuthorized) {
           setTimeout(() => setIsStrategyModalOpen(true), 1200);
         }
       }
@@ -153,24 +146,24 @@ export default function Dashboard() {
     fetchDashboardData();
   }, [isMounted, router]);
 
-  // --- AZIONI DI SICUREZZA IP ---
+  // --- AZIONI SBLOCCO DISPOSITIVO LOCALE ---
   const authorizeDevice = async () => {
-    // 1. Aggiorna l'IP nel database così non glielo chiede più
-    await supabase.from('profiles').update({ last_ip: detectedIp }).eq('id', user.id);
-    // 2. Crea un Log Notifica
-    await supabase.from('notifications').insert([{ user_id: user.id, title: '🛡️ Dispositivo Autorizzato', message: `Hai autorizzato con successo un nuovo accesso dall'IP: ${detectedIp}.`, type: 'success' }]);
-    // 3. Sblocca la UI
-    setProfile({...profile, last_ip: detectedIp});
-    setSecurityLock(false);
-    showToast("Dispositivo Autorizzato con Successo", "success");
+    // Registra questo browser/dispositivo come sicuro
+    localStorage.setItem('fp_device_auth_v1', 'true');
     
-    // Mostra il modale onboarding se l'utente è nuovo
+    // Log di Sicurezza (Opzionale)
+    await supabase.from('notifications').insert([{ user_id: user.id, title: '📱 Nuovo Dispositivo Verificato', message: `Hai autorizzato con successo l'accesso da un nuovo dispositivo. IP Rilevato: ${detectedIp}.`, type: 'success' }]);
+    
+    // Rimuove il blocco visivo
+    setSecurityLock(false);
+    showToast("Dispositivo Autorizzato e Registrato.", "success");
+    
+    // Modale strategia se è proprio il primissimo accesso
     if (stats.clicks === 0 && !profile.assigned_site_link) setTimeout(() => setIsStrategyModalOpen(true), 800);
   };
 
   const lockAccountAndLogout = async () => {
-    // Registra l'intrusione prima di sbatterlo fuori
-    await supabase.from('notifications').insert([{ user_id: user.id, title: '🚨 TENTATIVO INTRUSIONE BLOCCATO', message: `Accesso negato all'indirizzo IP: ${detectedIp}. Ti consigliamo di proteggere la tua casella email.`, type: 'error' }]);
+    await supabase.from('notifications').insert([{ user_id: user.id, title: '🚨 INTRUSIONE RESPINTA', message: `Hai negato l'accesso a un dispositivo sconosciuto (${detectedIp}). Il tuo terminale è al sicuro.`, type: 'error' }]);
     await supabase.auth.signOut();
     router.push('/login');
   };
@@ -257,7 +250,7 @@ export default function Dashboard() {
   if (loading) return <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center gap-5"><div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin shadow-[0_0_20px_rgba(59,130,246,0.5)]"></div><p className="text-blue-500/80 text-[11px] font-mono tracking-widest uppercase animate-pulse">Establishing Secure Connection...</p></div>;
 
   // =======================================================================
-  // 🔴 SCHERMATA DI BLOCCO IP (DEVICE AUTHORIZATION)
+  // 🔴 DEVICE AUTHORIZATION (IL TERMINALE ROSSO)
   // =======================================================================
   if (securityLock) {
     return (
@@ -273,7 +266,6 @@ export default function Dashboard() {
           @keyframes shimmer { 0% { transform: translateX(-100%) rotate(30deg); } 100% { transform: translateX(100%) rotate(30deg); } }
         `}} />
 
-        {/* Effetto Allarme Rosso Sfondo */}
         <div className="absolute inset-0 z-0 bg-[radial-gradient(rgba(244,63,94,0.05)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-rose-600/10 rounded-full blur-[180px] pointer-events-none animate-pulse"></div>
 
@@ -284,18 +276,18 @@ export default function Dashboard() {
             <span className="animate-pulse drop-shadow-md">⚠️</span>
           </div>
           
-          <h2 className="text-3xl font-black text-white mb-4 tracking-tight text-center">Nuovo Dispositivo Rilevato</h2>
+          <h2 className="text-3xl font-black text-white mb-4 tracking-tight text-center">Dispositivo Sconosciuto</h2>
           <p className="text-slate-400 text-center mb-8 leading-relaxed font-medium">
-            Per garantirti il massimo livello di sicurezza bancaria, abbiamo temporaneamente sospeso l'accesso al Terminale. È stato rilevato un tentativo di login da un indirizzo IP sconosciuto: <br/>
-            <strong className="text-rose-400 font-mono bg-rose-500/10 px-4 py-1.5 rounded-lg mt-4 inline-block border border-rose-500/20">{detectedIp}</strong>
+            Per garantirti il massimo livello di sicurezza bancaria, abbiamo rilevato l'accesso da un nuovo browser o dispositivo. <br/>
+            IP Origine: <strong className="text-rose-400 font-mono bg-rose-500/10 px-2 py-1 rounded-md mt-2 inline-block border border-rose-500/20">{detectedIp}</strong>
           </p>
           
           <div className="flex flex-col gap-4 pt-4 border-t border-white/5">
             <button onClick={authorizeDevice} className="w-full btn-glow-green bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[12px] px-8 py-5 rounded-2xl active:scale-95 uppercase tracking-widest transition-all shadow-[0_10px_30px_rgba(16,185,129,0.3)]">
-              ✓ Sì, Sono Io (Autorizza Rete)
+              ✓ Sì, Sono Io (Autorizza e Procedi)
             </button>
             <button onClick={lockAccountAndLogout} className="w-full bg-transparent hover:bg-rose-500/10 border border-rose-500/30 text-rose-400 font-black text-[10px] px-8 py-5 rounded-2xl active:scale-95 uppercase tracking-widest transition-all">
-              ✕ Non Sono Io (Blocca Account)
+              ✕ Non Sono Io (Disconnetti)
             </button>
           </div>
         </div>
@@ -422,13 +414,11 @@ export default function Dashboard() {
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         body { font-family: 'Inter', sans-serif; }
         
-        /* Keyframes */
         @keyframes slideUpFade { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes growUp { from { transform: scaleY(0); } to { transform: scaleY(1); } }
         @keyframes shimmerBtn { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
         @keyframes scaleInModal { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
 
-        /* Staggering - Entrata Scaglionata Magica */
         .stagger-1 { animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards; opacity: 0; }
         .stagger-2 { animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.15s forwards; opacity: 0; }
         .stagger-3 { animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.25s forwards; opacity: 0; }
@@ -436,30 +426,22 @@ export default function Dashboard() {
         
         .modal-animate { animation: scaleInModal 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 
-        /* Vetro Absoluto */
         .card-glass { background: rgba(15, 23, 42, 0.3); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); border: 1px solid rgba(255, 255, 255, 0.03); border-radius: 1.5rem; transition: all 0.3s ease; }
         .card-glass-hover:hover { border-color: rgba(255, 255, 255, 0.08); box-shadow: 0 30px 60px -15px rgba(0,0,0,0.8); transform: translateY(-4px); background: rgba(15, 23, 42, 0.5); }
         
-        /* Input Premium */
         .input-premium { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.05); color: white; padding: 18px 22px; border-radius: 1rem; width: 100%; outline: none; transition: all 0.3s ease; font-size: 0.95rem; font-weight: 500; }
         .input-premium:focus { border-color: #3B82F6; background: rgba(0, 0, 0, 0.6); box-shadow: inset 0 0 0 1px #3B82F6, 0 0 20px rgba(59,130,246,0.15); }
         
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .text-gradient { background: linear-gradient(135deg, #ffffff 0%, #94a3b8 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         
-        /* Shimmer Button Effect */
-        .btn-shimmer {
-          position: relative; overflow: hidden; background-size: 200% auto; transition: all 0.3s ease;
-          background-image: linear-gradient(90deg, rgba(37,99,235,1) 0%, rgba(96,165,250,0.8) 50%, rgba(37,99,235,1) 100%);
-        }
+        .btn-shimmer { position: relative; overflow: hidden; background-size: 200% auto; transition: all 0.3s ease; background-image: linear-gradient(90deg, rgba(37,99,235,1) 0%, rgba(96,165,250,0.8) 50%, rgba(37,99,235,1) 100%); }
         .btn-shimmer:hover { animation: shimmerBtn 2s linear infinite; transform: translateY(-2px); box-shadow: 0 10px 30px -10px rgba(59,130,246,0.8); }
 
-        /* Sidebar Tabs */
         .tab-btn { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px 20px; border-radius: 1rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 800; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); border: 1px solid transparent; }
         .tab-btn.active { background: rgba(59, 130, 246, 0.1); color: #60A5FA; border-color: rgba(59, 130, 246, 0.2); box-shadow: inset 0 0 20px rgba(59,130,246,0.05); }
         .tab-btn:not(.active):hover { background: rgba(255, 255, 255, 0.02); color: white; transform: translateX(6px); }
 
-        /* Nav Mobile Floating */
         .mobile-nav-glass { background: rgba(2, 6, 23, 0.75); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); border-top: 1px solid rgba(255, 255, 255, 0.05); }
       `}} />
 
