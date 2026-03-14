@@ -33,11 +33,14 @@ export default function Dashboard() {
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
   
-  // UI & Animazioni
+  // UI & Sicurezza
   const [activeTab, setActiveTab] = useState('overview'); 
   const [animKey, setAnimKey] = useState(0); 
   const [loading, setLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
+  const [securityLock, setSecurityLock] = useState(false); // NUOVO: Blocco IP
+  const [detectedIp, setDetectedIp] = useState(''); // NUOVO: IP Rilevato
+  
   const mainContentRef = useRef(null);
 
   // Form & Modali
@@ -81,16 +84,32 @@ export default function Dashboard() {
 
       const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       
+      let isNewDevice = false;
+
+      // MOTORE DI CONTROLLO IP (TELEGRAM STYLE)
       try {
         const res = await fetch('https://api.ipify.org?format=json');
         const { ip } = await res.json();
-        if (profileData && profileData.last_ip !== ip) {
-           await supabase.from('profiles').update({ last_ip: ip }).eq('id', user.id);
+        setDetectedIp(ip);
+
+        if (profileData) {
+          if (!profileData.last_ip) {
+             // Primo accesso in assoluto, salva l'IP silenziosamente
+             await supabase.from('profiles').update({ last_ip: ip }).eq('id', user.id);
+          } else if (profileData.last_ip !== ip) {
+             // NUOVO IP RILEVATO! Scatta il blocco di sicurezza
+             isNewDevice = true;
+          }
         }
-      } catch (e) {}
+      } catch (e) { console.log("Controllo IP Bypassato (AdBlocker/Firewall)"); }
+
+      if (isNewDevice) {
+        setSecurityLock(true);
+      }
 
       setProfile(profileData);
       
+      // Carichiamo comunque i dati in background così quando sblocca l'IP è tutto pronto senza caricamenti
       if (profileData?.traffic_status === 'approved') {
         setBilling({ full_name: profileData.full_name || '', entity_type: profileData.entity_type || 'privato', vat_number: profileData.vat_number || '', tax_id: profileData.tax_id || '', address: profileData.address || '', payment_info: profileData.payment_info || '', registered_website: profileData.registered_website || '', traffic_volume: profileData.traffic_volume || '' });
 
@@ -125,7 +144,7 @@ export default function Dashboard() {
         });
         setChartData(dailyData);
 
-        if (totalClicks === 0 && !profileData.assigned_site_link) {
+        if (totalClicks === 0 && !profileData.assigned_site_link && !isNewDevice) {
           setTimeout(() => setIsStrategyModalOpen(true), 1200);
         }
       }
@@ -133,6 +152,28 @@ export default function Dashboard() {
     };
     fetchDashboardData();
   }, [isMounted, router]);
+
+  // --- AZIONI DI SICUREZZA IP ---
+  const authorizeDevice = async () => {
+    // 1. Aggiorna l'IP nel database così non glielo chiede più
+    await supabase.from('profiles').update({ last_ip: detectedIp }).eq('id', user.id);
+    // 2. Crea un Log Notifica
+    await supabase.from('notifications').insert([{ user_id: user.id, title: '🛡️ Dispositivo Autorizzato', message: `Hai autorizzato con successo un nuovo accesso dall'IP: ${detectedIp}.`, type: 'success' }]);
+    // 3. Sblocca la UI
+    setProfile({...profile, last_ip: detectedIp});
+    setSecurityLock(false);
+    showToast("Dispositivo Autorizzato con Successo", "success");
+    
+    // Mostra il modale onboarding se l'utente è nuovo
+    if (stats.clicks === 0 && !profile.assigned_site_link) setTimeout(() => setIsStrategyModalOpen(true), 800);
+  };
+
+  const lockAccountAndLogout = async () => {
+    // Registra l'intrusione prima di sbatterlo fuori
+    await supabase.from('notifications').insert([{ user_id: user.id, title: '🚨 TENTATIVO INTRUSIONE BLOCCATO', message: `Accesso negato all'indirizzo IP: ${detectedIp}. Ti consigliamo di proteggere la tua casella email.`, type: 'error' }]);
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
 
   const handleLogout = async () => { await supabase.auth.signOut(); router.push('/'); };
 
@@ -214,6 +255,53 @@ export default function Dashboard() {
 
   if (!isMounted) return null;
   if (loading) return <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center gap-5"><div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin shadow-[0_0_20px_rgba(59,130,246,0.5)]"></div><p className="text-blue-500/80 text-[11px] font-mono tracking-widest uppercase animate-pulse">Establishing Secure Connection...</p></div>;
+
+  // =======================================================================
+  // 🔴 SCHERMATA DI BLOCCO IP (DEVICE AUTHORIZATION)
+  // =======================================================================
+  if (securityLock) {
+    return (
+      <div className="min-h-screen bg-[#02040A] text-white flex items-center justify-center p-4 relative overflow-hidden selection:bg-rose-500/30">
+        
+        <style dangerouslySetInnerHTML={{__html: `
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
+          body { font-family: 'Inter', sans-serif; }
+          .modal-animate { animation: scaleInModal 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+          @keyframes scaleInModal { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+          .btn-glow-green { position: relative; overflow: hidden; }
+          .btn-glow-green::after { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(to right, transparent, rgba(255,255,255,0.2), transparent); transform: rotate(30deg); animation: shimmer 2.5s infinite; }
+          @keyframes shimmer { 0% { transform: translateX(-100%) rotate(30deg); } 100% { transform: translateX(100%) rotate(30deg); } }
+        `}} />
+
+        {/* Effetto Allarme Rosso Sfondo */}
+        <div className="absolute inset-0 z-0 bg-[radial-gradient(rgba(244,63,94,0.05)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-rose-600/10 rounded-full blur-[180px] pointer-events-none animate-pulse"></div>
+
+        <div className="bg-[#0B1221] p-8 sm:p-14 rounded-[3rem] max-w-xl w-full relative z-10 border border-rose-500/30 shadow-[0_20px_80px_rgba(244,63,94,0.15)] modal-animate">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-rose-600 to-amber-500 shadow-[0_0_20px_rgba(244,63,94,0.8)]"></div>
+          
+          <div className="w-24 h-24 bg-rose-500/10 border border-rose-500/30 rounded-full flex items-center justify-center text-4xl mx-auto mb-8 shadow-[0_0_40px_rgba(244,63,94,0.3)]">
+            <span className="animate-pulse drop-shadow-md">⚠️</span>
+          </div>
+          
+          <h2 className="text-3xl font-black text-white mb-4 tracking-tight text-center">Nuovo Dispositivo Rilevato</h2>
+          <p className="text-slate-400 text-center mb-8 leading-relaxed font-medium">
+            Per garantirti il massimo livello di sicurezza bancaria, abbiamo temporaneamente sospeso l'accesso al Terminale. È stato rilevato un tentativo di login da un indirizzo IP sconosciuto: <br/>
+            <strong className="text-rose-400 font-mono bg-rose-500/10 px-4 py-1.5 rounded-lg mt-4 inline-block border border-rose-500/20">{detectedIp}</strong>
+          </p>
+          
+          <div className="flex flex-col gap-4 pt-4 border-t border-white/5">
+            <button onClick={authorizeDevice} className="w-full btn-glow-green bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[12px] px-8 py-5 rounded-2xl active:scale-95 uppercase tracking-widest transition-all shadow-[0_10px_30px_rgba(16,185,129,0.3)]">
+              ✓ Sì, Sono Io (Autorizza Rete)
+            </button>
+            <button onClick={lockAccountAndLogout} className="w-full bg-transparent hover:bg-rose-500/10 border border-rose-500/30 text-rose-400 font-black text-[10px] px-8 py-5 rounded-2xl active:scale-95 uppercase tracking-widest transition-all">
+              ✕ Non Sono Io (Blocca Account)
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // =======================================================================
   // GATEKEEPER: SALA D'ATTESA VIP (Ultra Premium)
@@ -443,280 +531,279 @@ export default function Dashboard() {
       </aside>
 
       {/* MAIN CONTENT VIVENTE */}
-      {profile && profile.traffic_status === 'approved' && (
-        <main className="flex-1 h-screen overflow-y-auto p-4 sm:p-8 lg:p-14 pb-36 relative z-10 hide-scrollbar scroll-smooth">
-          <div key={animKey} className="max-w-6xl mx-auto">
+      <main className="flex-1 h-screen overflow-y-auto p-4 sm:p-8 lg:p-14 pb-36 relative z-10 hide-scrollbar scroll-smooth">
+        <div key={animKey} className="max-w-6xl mx-auto">
 
-            {/* TAB 1: OVERVIEW */}
-            {activeTab === 'overview' && (
-              <div className="space-y-8 lg:space-y-10">
-                
-                <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 pb-6 border-b border-white/5 stagger-1">
-                  <div>
-                    <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight text-gradient leading-[1.1] mb-2">Console Operativa</h1>
-                    <p className="text-xs sm:text-sm text-slate-400 font-mono flex items-center gap-2">
-                      <span className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.8)]"></span> API Connection: Secure
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <button onClick={() => setIsStrategyModalOpen(true)} className="flex items-center gap-2.5 bg-white/[0.03] hover:bg-white/[0.08] border border-white/10 text-white px-6 py-4 rounded-[1.2rem] font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg hover:-translate-y-1">
-                      <span className="text-lg">🧠</span> Playbook
-                    </button>
-                    <button onClick={markNotificationsAsRead} className="relative w-14 h-14 bg-white/[0.03] hover:bg-white/[0.08] rounded-[1.2rem] flex items-center justify-center text-2xl transition-all border border-white/10 text-white shadow-lg hover:-translate-y-1">
-                      🔔 {unreadCount > 0 && <span className="absolute -top-2 -right-2 w-6 h-6 bg-blue-600 text-white text-[11px] font-black rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(37,99,235,0.8)] animate-bounce border-2 border-[#020617]">{unreadCount}</span>}
-                    </button>
-                  </div>
+          {/* TAB 1: OVERVIEW */}
+          {activeTab === 'overview' && (
+            <div className="space-y-8 lg:space-y-10">
+              
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 pb-6 border-b border-white/5 stagger-1">
+                <div>
+                  <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight text-gradient leading-[1.1] mb-2">Console Operativa</h1>
+                  <p className="text-xs sm:text-sm text-slate-400 font-mono flex items-center gap-2">
+                    <span className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.8)]"></span> API Connection: Secure
+                  </p>
                 </div>
-
-                {/* Notifiche */}
-                {showNotifications && (
-                  <div className="absolute top-32 right-12 z-50 w-[400px] card-glass p-2 shadow-[0_30px_60px_rgba(0,0,0,0.8)] rounded-3xl overflow-hidden modal-animate border border-white/10">
-                    <div className="p-5 bg-white/5 border-b border-white/5 font-black text-white uppercase tracking-widest text-[10px] flex justify-between items-center rounded-t-[1.5rem]">
-                      <span>Centro Notifiche B2B</span>
-                      <button onClick={() => setShowNotifications(false)} className="text-slate-400 hover:text-white bg-white/5 w-8 h-8 rounded-full flex items-center justify-center">✕</button>
-                    </div>
-                    <div className="max-h-[60vh] overflow-y-auto p-3 hide-scrollbar">
-                      {notifications.length === 0 ? <p className="p-10 text-[11px] text-slate-500 text-center uppercase tracking-widest font-black">Nessun evento registrato</p> : notifications.map(n => (
-                        <div key={n.id} className={`p-6 mb-3 rounded-[1.5rem] text-sm transition-all ${n.is_read ? 'bg-transparent opacity-60' : 'bg-gradient-to-br from-blue-600/10 to-transparent border border-blue-500/20 shadow-lg'}`}>
-                          <h4 className="font-black text-white mb-2">{n.title}</h4>
-                          <p className="text-xs text-slate-300 leading-relaxed">{n.message}</p>
-                          <p className="text-[10px] text-blue-400 mt-4 font-mono">{new Date(n.created_at).toLocaleString()}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Asset Multi-Link Terminal */}
-                {profile?.assigned_site_link && (
-                  <div className="card-glass p-8 sm:p-12 rounded-[2.5rem] border-l-4 border-l-blue-500 relative overflow-hidden group stagger-2">
-                    <div className="absolute top-0 left-0 w-[500px] h-full bg-gradient-to-r from-blue-500/10 to-transparent pointer-events-none group-hover:from-blue-500/20 transition-all duration-500"></div>
-                    <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-                      <div className="flex-1">
-                        <h3 className="text-2xl sm:text-3xl font-black mb-3 tracking-tight text-white flex items-center gap-3">🚀 I tuoi Asset Operativi</h3>
-                        <p className="text-sm text-blue-100/60 leading-relaxed max-w-2xl font-medium">L'infrastruttura è attiva. Incolla questi link nelle tue campagne per abilitare il Postback Server-to-Server diretto con l'istituto.</p>
-                      </div>
-                      <div className="w-full lg:w-[450px] bg-black/60 border border-blue-500/30 rounded-[1.5rem] p-6 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)] relative group/copy transition-all hover:border-blue-400">
-                        <div className="flex justify-between items-center mb-4">
-                          <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest font-mono">Terminal Links</span>
-                          <button onClick={() => {navigator.clipboard.writeText(profile.assigned_site_link); showToast("🔗 Asset copiati negli appunti", 'success');}} className="text-[10px] bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white px-4 py-2 rounded-lg font-black uppercase tracking-widest transition-all">Copia Tutto</button>
-                        </div>
-                        <textarea readOnly value={profile.assigned_site_link} className="bg-transparent text-blue-300 font-mono text-sm w-full outline-none resize-none hide-scrollbar leading-relaxed" rows={Math.min(profile.assigned_site_link.split('\n').length, 5)} />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Metriche Premium */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-8 stagger-2">
-                  {[
-                    { label: "Liquidità Esigibile", value: `€${profile?.wallet_approved?.toFixed(2) || '0.00'}`, color: "text-white", glow: "hover:shadow-[0_10px_30px_rgba(255,255,255,0.1)] hover:border-white/20" },
-                    { label: "Volume in Valutazione", value: `€${profile?.wallet_pending?.toFixed(2) || '0.00'}`, color: "text-amber-400", glow: "hover:shadow-[0_10px_30px_rgba(245,158,11,0.15)] hover:border-amber-500/30" },
-                    { label: "Tasso Conversione", value: `${stats.cr.toFixed(2)}%`, color: "text-blue-400", glow: "hover:shadow-[0_10px_30px_rgba(59,130,246,0.15)] hover:border-blue-500/30" },
-                    { label: "Earnings Per Click", value: `€${stats.epc.toFixed(2)}`, color: "text-emerald-400", glow: "hover:shadow-[0_10px_30px_rgba(16,185,129,0.15)] hover:border-emerald-500/30" }
-                  ].map((stat, i) => (
-                    <div key={i} className={`card-glass p-8 flex flex-col justify-between min-h-[160px] transition-all duration-300 transform hover:-translate-y-1 ${stat.glow}`}>
-                      <span className="text-[10px] sm:text-[11px] font-black text-slate-500 uppercase tracking-widest">{stat.label}</span>
-                      <p className={`text-4xl sm:text-5xl font-black ${stat.color} tracking-tight mt-5 drop-shadow-lg`}>{stat.value}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <ChartComponent />
-
-                {/* Feed S2S */}
-                <div className="card-glass p-8 sm:p-12 relative overflow-hidden stagger-4">
-                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-5 mb-10 border-b border-white/5 pb-8">
-                      <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-widest">Log Transazioni S2S</h3>
-                      <div className="px-5 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-3 w-max shadow-[0_0_20px_rgba(16,185,129,0.1)]">
-                        <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,1)]"></span>
-                        <span className="text-[10px] uppercase font-black text-emerald-400 tracking-widest">Ricezione Dati Attiva</span>
-                      </div>
-                    </div>
-                    <div className="space-y-4">
-                      {conversions.slice(0, 6).map((conv, i) => (
-                        <div key={conv.id} className="flex justify-between items-center p-6 rounded-[1.5rem] bg-white/[0.01] border border-white/[0.03] hover:bg-white/[0.04] transition-all hover:scale-[1.01]" style={{animation: `slideUpFade 0.4s ease-out ${0.4 + (i*0.1)}s forwards`, opacity: 0}}>
-                          <div>
-                            <p className="text-base sm:text-lg font-black text-white tracking-tight mb-1.5">{conv.program_id || 'Lead Finanziario'}</p>
-                            <p className="text-[11px] font-mono text-slate-500">{new Date(conv.created_at).toLocaleString()}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className={`text-2xl sm:text-3xl font-black font-mono tracking-tight drop-shadow-md mb-1.5 ${conv.status === 'approved' ? 'text-emerald-400' : conv.status === 'rejected' ? 'text-rose-500' : 'text-amber-400'}`}>+€{conv.amount?.toFixed(2)}</p>
-                            <p className={`text-[10px] uppercase tracking-widest font-black ${conv.status === 'approved' ? 'text-emerald-500' : 'text-slate-500'}`}>{conv.status}</p>
-                          </div>
-                        </div>
-                      ))}
-                      {conversions.length === 0 && (
-                        <div className="py-20 text-center border-2 border-dashed border-white/10 rounded-[2rem] bg-white/[0.01]">
-                          <span className="text-5xl opacity-20 mb-6 block">🔌</span>
-                          <p className="text-[12px] font-black text-slate-500 uppercase tracking-widest">In attesa dei primi log dal server.</p>
-                        </div>
-                      )}
-                    </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB 2: MARKETPLACE */}
-            {activeTab === 'marketplace' && (
-               <div className="space-y-8">
-                  <div className="pb-6 border-b border-white/5 stagger-1">
-                    <h1 className="text-4xl sm:text-6xl font-black text-white tracking-tight text-gradient mb-4">Marketplace B2B</h1>
-                    <p className="text-base text-slate-400 font-medium leading-relaxed max-w-3xl">Accesso diretto ai programmi di acquisizione istituzionali. I margini esposti rappresentano il Payout Netto garantito all'affiliato.</p>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 sm:gap-8">
-                    {offers.map((offer, i) => (
-                      <div key={offer.id} className="card-glass card-glass-hover p-8 sm:p-10 flex flex-col relative group overflow-hidden" style={{animation: `slideUpFade 0.5s ease-out ${0.1 + (i*0.05)}s forwards`, opacity: 0}}>
-                        <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/5 rounded-bl-[100%] pointer-events-none group-hover:scale-125 transition-transform duration-700"></div>
-                        
-                        <div className="flex items-start gap-6 mb-8 border-b border-white/5 pb-8 relative z-10">
-                          <SafeImage src={offer.image_url} alt={offer.name} className="w-16 h-16 sm:w-20 sm:h-20 bg-white" />
-                          <div className="flex-1">
-                            <h4 className="font-black text-white text-2xl sm:text-3xl tracking-tight leading-none group-hover:text-blue-400 transition-colors mb-3">{offer.name}</h4>
-                            <div className="flex items-center gap-3">
-                              <span className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-lg ${offer.payout_type === 'CPL' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'}`}>{offer.payout_type || 'CPA'}</span>
-                              <button onClick={() => {setSelectedOffer(offer); setIsOfferModalOpen(true);}} className="text-[9px] text-slate-500 hover:text-white uppercase tracking-widest font-black transition-colors flex items-center gap-1">Policy ➔</button>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mb-8 relative z-10">
-                          <p className="text-[10px] uppercase font-black text-slate-500 tracking-widest mb-2">Margine Netto</p>
-                          <p className="font-black font-mono text-emerald-400 text-4xl sm:text-5xl tracking-tight drop-shadow-[0_0_15px_rgba(16,185,129,0.2)]">€{offer.partner_payout?.toFixed(2)}</p>
-                        </div>
-
-                        <div className="mt-auto flex flex-col sm:flex-row gap-3 relative z-10">
-                          <button onClick={(e) => openSiteModal(offer, e)} className="flex-1 text-[10px] font-black text-slate-300 bg-white/5 border border-white/10 px-4 py-4 rounded-xl hover:bg-white/10 transition-colors uppercase tracking-widest active:scale-95 text-center">Infrastruttura</button>
-                          <button onClick={(e) => handleGetLink(offer, e)} className="flex-[2] btn-shimmer text-[10px] font-black uppercase tracking-widest text-white px-4 py-4 rounded-xl active:scale-95 transition-all text-center">Ottieni Link S2S</button>
-                        </div>
-                      </div>
-                    ))}
-                    {offers.length === 0 && <div className="col-span-full py-24 text-center stagger-2"><p className="text-sm font-black text-slate-500 uppercase tracking-widest animate-pulse">Sincronizzazione inventario in corso...</p></div>}
-                  </div>
-               </div>
-            )}
-            
-            {/* TAB 3: ASSETS */}
-            {activeTab === 'assets' && (
-              <div className="space-y-8 max-w-4xl">
-                <div className="pb-6 border-b border-white/5 stagger-1">
-                  <h1 className="text-4xl sm:text-6xl font-black text-white tracking-tight text-gradient mb-4">Sviluppo Asset</h1>
-                  <p className="text-base text-slate-400 leading-relaxed font-medium">Richiedi la costruzione di nuovi Hub o dichiara sorgenti esterne per abilitare il Tracker S2S.</p>
-                </div>
-                
-                <div className="card-glass p-8 sm:p-14 relative overflow-hidden stagger-2">
-                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 mb-12">
-                    <div>
-                      <h2 className="text-3xl font-black text-white tracking-tight mb-3">1. Audit Canale Esterno</h2>
-                      <p className="text-sm text-slate-400 max-w-md leading-relaxed">Dichiara domini o profili social per la validazione Compliance.</p>
-                    </div>
-                    <StatusBadge status={profile?.traffic_status} />
-                  </div>
-
-                  <div className="space-y-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      <div>
-                        <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">URL Principale</label>
-                        <input type="url" value={billing.registered_website} onChange={(e) => setBilling({...billing, registered_website: e.target.value})} className="input-premium font-mono text-blue-300" placeholder="https://..." />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Strategia & Budget Mensile</label>
-                        <input type="text" value={billing.traffic_volume} onChange={(e) => setBilling({...billing, traffic_volume: e.target.value})} className="input-premium" placeholder="Es. Meta Ads / 1000€" />
-                      </div>
-                    </div>
-                    
-                    <div className="pt-2 flex justify-end">
-                      <button onClick={handleSaveSettings} disabled={savingSettings} className="w-full sm:w-auto btn-shimmer text-white font-black text-[12px] px-12 py-5 rounded-2xl active:scale-95 uppercase tracking-widest disabled:opacity-50">
-                        {savingSettings ? 'Inoltro Sicuro...' : 'Sottoponi a Dipartimento Compliance'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {profile?.traffic_notes && (
-                    <div className="mt-12 p-8 sm:p-10 rounded-[2rem] border border-blue-500/20 bg-gradient-to-br from-blue-900/10 to-transparent relative overflow-hidden">
-                      <div className="absolute left-0 top-0 w-1.5 h-full bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,1)]"></div>
-                      <h3 className="text-sm font-black text-blue-400 mb-4 uppercase tracking-widest flex items-center gap-3">Storico Briefing Operativi</h3>
-                      <textarea readOnly value={profile.traffic_notes} className="bg-black/60 border border-white/5 text-slate-300 p-6 rounded-2xl font-mono text-xs sm:text-sm w-full resize-none outline-none hide-scrollbar leading-relaxed" rows={6} />
-                    </div>
-                  )}
-                </div>
-
-                <div className="card-glass p-8 sm:p-14 relative overflow-hidden border-indigo-500/30 stagger-3">
-                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/10 to-transparent pointer-events-none"></div>
-                  <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-6 mb-8 relative z-10">
-                    <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight leading-none">2. Deploy "Turn-Key" Hub</h2>
-                    <span className="bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 font-black px-5 py-2.5 rounded-xl text-[10px] uppercase tracking-widest shadow-[0_0_20px_rgba(79,70,229,0.3)]">Servizio Incluso</span>
-                  </div>
-                  <p className="text-base text-slate-300 mb-10 leading-relaxed relative z-10 max-w-2xl font-medium">L'IT progetterà per te Hub di comparazione ad alta conversione. Ogni nuovo URL crittografato verrà consegnato nel Terminale.</p>
-                  <button onClick={() => {setSelectedOffer(null); setIsSiteModalOpen(true);}} className="w-full sm:w-auto bg-white text-black hover:bg-slate-200 font-black text-[12px] uppercase tracking-widest px-14 py-6 rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.2)] transition-all hover:scale-[1.02] active:scale-95 relative z-10">
-                    Avvia Nuova Richiesta IT
+                <div className="flex items-center gap-4">
+                  <button onClick={() => setIsStrategyModalOpen(true)} className="flex items-center gap-2.5 bg-white/[0.03] hover:bg-white/[0.08] border border-white/10 text-white px-6 py-4 rounded-[1.2rem] font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg hover:-translate-y-1">
+                    <span className="text-lg">🧠</span> Playbook
+                  </button>
+                  <button onClick={markNotificationsAsRead} className="relative w-14 h-14 bg-white/[0.03] hover:bg-white/[0.08] rounded-[1.2rem] flex items-center justify-center text-2xl transition-all border border-white/10 text-white shadow-lg hover:-translate-y-1">
+                    🔔 {unreadCount > 0 && <span className="absolute -top-2 -right-2 w-6 h-6 bg-blue-600 text-white text-[11px] font-black rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(37,99,235,0.8)] animate-bounce border-2 border-[#020617]">{unreadCount}</span>}
                   </button>
                 </div>
               </div>
-            )}
 
-            {/* TAB 4: KYC */}
-            {activeTab === 'kyc' && (
-               <div className="space-y-8 max-w-4xl">
-                 <div className="pb-6 border-b border-white/5 stagger-1">
-                   <h1 className="text-4xl sm:text-6xl font-black text-white tracking-tight text-gradient mb-4">Tesoreria Fiscale</h1>
-                   <p className="text-base text-slate-400 font-medium leading-relaxed">Dati protetti tramite crittografia AES-256. I pagamenti esigibili vengono liquidati automaticamente su circuito SEPA al 15 del mese.</p>
-                 </div>
-                 
-                 <div className="card-glass p-8 sm:p-14 relative overflow-hidden stagger-2">
-                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-12 border-b border-white/5 pb-10">
-                     <h2 className="text-3xl font-black text-white tracking-tight">Profilo Beneficiario</h2>
-                     <div className="bg-black/40 px-5 py-2.5 rounded-xl border border-white/10 text-[11px] font-black uppercase tracking-widest flex items-center gap-3 shadow-inner">
-                       Stato KYC: {profile?.kyc_status === 'approved' ? <span className="text-emerald-400 flex items-center gap-1.5"><span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span> Verificato</span> : profile?.kyc_status === 'pending' ? <span className="text-amber-400">In Audit</span> : <span className="text-slate-500">Mancante</span>}
-                     </div>
-                   </div>
+              {/* Notifiche */}
+              {showNotifications && (
+                <div className="absolute top-32 right-12 z-50 w-[400px] card-glass p-2 shadow-[0_30px_60px_rgba(0,0,0,0.8)] rounded-3xl overflow-hidden modal-animate border border-white/10">
+                  <div className="p-5 bg-white/5 border-b border-white/5 font-black text-white uppercase tracking-widest text-[10px] flex justify-between items-center rounded-t-[1.5rem]">
+                    <span>Centro Notifiche B2B</span>
+                    <button onClick={() => setShowNotifications(false)} className="text-slate-400 hover:text-white bg-white/5 w-8 h-8 rounded-full flex items-center justify-center">✕</button>
+                  </div>
+                  <div className="max-h-[60vh] overflow-y-auto p-3 hide-scrollbar">
+                    {notifications.length === 0 ? <p className="p-10 text-[11px] text-slate-500 text-center uppercase tracking-widest font-black">Nessun evento registrato</p> : notifications.map(n => (
+                      <div key={n.id} className={`p-6 mb-3 rounded-[1.5rem] text-sm transition-all ${n.is_read ? 'bg-transparent opacity-60' : 'bg-gradient-to-br from-blue-600/10 to-transparent border border-blue-500/20 shadow-lg'}`}>
+                        <h4 className="font-black text-white mb-2">{n.title}</h4>
+                        <p className="text-xs text-slate-300 leading-relaxed">{n.message}</p>
+                        <p className="text-[10px] text-blue-400 mt-4 font-mono">{new Date(n.created_at).toLocaleString()}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-                   <div className="space-y-8 relative z-10">
-                    <div className="flex p-2 bg-black/50 rounded-2xl w-full sm:w-max border border-white/5 shadow-inner">
-                      <button onClick={() => setBilling({...billing, entity_type: 'privato'})} disabled={profile?.kyc_status === 'approved'} className={`px-12 py-4 text-[11px] font-black rounded-xl transition-all uppercase tracking-widest disabled:opacity-50 ${billing.entity_type === 'privato' ? 'bg-white text-black shadow-lg' : 'text-slate-500 hover:text-white'}`}>Privato</button>
-                      <button onClick={() => setBilling({...billing, entity_type: 'azienda'})} disabled={profile?.kyc_status === 'approved'} className={`px-12 py-4 text-[11px] font-black rounded-xl transition-all uppercase tracking-widest disabled:opacity-50 ${billing.entity_type === 'azienda' ? 'bg-white text-black shadow-lg' : 'text-slate-500 hover:text-white'}`}>Impresa / P.IVA</button>
+              {/* Asset Multi-Link Terminal */}
+              {profile?.assigned_site_link && (
+                <div className="card-glass p-8 sm:p-12 rounded-[2.5rem] border-l-4 border-l-blue-500 relative overflow-hidden group stagger-2">
+                  <div className="absolute top-0 left-0 w-[500px] h-full bg-gradient-to-r from-blue-500/10 to-transparent pointer-events-none group-hover:from-blue-500/20 transition-all duration-500"></div>
+                  <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+                    <div className="flex-1">
+                      <h3 className="text-2xl sm:text-3xl font-black mb-3 tracking-tight text-white flex items-center gap-3">🚀 I tuoi Asset Operativi</h3>
+                      <p className="text-sm text-blue-100/60 leading-relaxed max-w-2xl font-medium">L'infrastruttura è attiva. Incolla questi link nelle tue campagne per abilitare il Postback Server-to-Server diretto con l'istituto.</p>
                     </div>
+                    <div className="w-full lg:w-[450px] bg-black/60 border border-blue-500/30 rounded-[1.5rem] p-6 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)] relative group/copy transition-all hover:border-blue-400">
+                      <div className="flex justify-between items-center mb-4">
+                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest font-mono">Terminal Links</span>
+                        <button onClick={() => {navigator.clipboard.writeText(profile.assigned_site_link); showToast("🔗 Asset copiati negli appunti", 'success');}} className="text-[10px] bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white px-4 py-2 rounded-lg font-black uppercase tracking-widest transition-all">Copia Tutto</button>
+                      </div>
+                      <textarea readOnly value={profile.assigned_site_link} className="bg-transparent text-blue-300 font-mono text-sm w-full outline-none resize-none hide-scrollbar leading-relaxed" rows={Math.min(profile.assigned_site_link.split('\n').length, 5)} />
+                    </div>
+                  </div>
+                </div>
+              )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-white/[0.02] p-8 sm:p-10 rounded-[2.5rem] border border-white/5">
-                      <div className="md:col-span-2">
-                        <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Intestatario Fiscale Conto</label>
-                        <input type="text" value={billing.full_name} onChange={(e) => setBilling({...billing, full_name: e.target.value})} disabled={profile?.kyc_status === 'approved'} className="input-premium" placeholder="Nome Completo o Ragione Sociale" />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Codice Fiscale</label>
-                        <input type="text" value={billing.tax_id} onChange={(e) => setBilling({...billing, tax_id: e.target.value.toUpperCase()})} disabled={profile?.kyc_status === 'approved'} className="input-premium uppercase font-mono" placeholder="RSSMRA..." />
-                      </div>
-                      {billing.entity_type === 'azienda' && (
+              {/* Metriche Premium */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-8 stagger-2">
+                {[
+                  { label: "Liquidità Esigibile", value: `€${profile?.wallet_approved?.toFixed(2) || '0.00'}`, color: "text-white", glow: "hover:shadow-[0_10px_30px_rgba(255,255,255,0.1)] hover:border-white/20" },
+                  { label: "Volume in Valutazione", value: `€${profile?.wallet_pending?.toFixed(2) || '0.00'}`, color: "text-amber-400", glow: "hover:shadow-[0_10px_30px_rgba(245,158,11,0.15)] hover:border-amber-500/30" },
+                  { label: "Tasso Conversione", value: `${stats.cr.toFixed(2)}%`, color: "text-blue-400", glow: "hover:shadow-[0_10px_30px_rgba(59,130,246,0.15)] hover:border-blue-500/30" },
+                  { label: "Earnings Per Click", value: `€${stats.epc.toFixed(2)}`, color: "text-emerald-400", glow: "hover:shadow-[0_10px_30px_rgba(16,185,129,0.15)] hover:border-emerald-500/30" }
+                ].map((stat, i) => (
+                  <div key={i} className={`card-glass p-8 flex flex-col justify-between min-h-[160px] transition-all duration-300 transform hover:-translate-y-1 ${stat.glow}`}>
+                    <span className="text-[10px] sm:text-[11px] font-black text-slate-500 uppercase tracking-widest">{stat.label}</span>
+                    <p className={`text-4xl sm:text-5xl font-black ${stat.color} tracking-tight mt-5 drop-shadow-lg`}>{stat.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <ChartComponent />
+
+              {/* Feed S2S */}
+              <div className="card-glass p-8 sm:p-12 relative overflow-hidden stagger-4">
+                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-5 mb-10 border-b border-white/5 pb-8">
+                    <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-widest">Log Transazioni S2S</h3>
+                    <div className="px-5 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-3 w-max shadow-[0_0_20px_rgba(16,185,129,0.1)]">
+                      <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,1)]"></span>
+                      <span className="text-[10px] uppercase font-black text-emerald-400 tracking-widest">Ricezione Dati Attiva</span>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    {conversions.slice(0, 6).map((conv, i) => (
+                      <div key={conv.id} className="flex justify-between items-center p-6 rounded-[1.5rem] bg-white/[0.01] border border-white/[0.03] hover:bg-white/[0.04] transition-all hover:scale-[1.01]" style={{animation: `slideUpFade 0.4s ease-out ${0.4 + (i*0.1)}s forwards`, opacity: 0}}>
                         <div>
-                          <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Partita IVA</label>
-                          <input type="text" value={billing.vat_number} onChange={(e) => setBilling({...billing, vat_number: e.target.value})} disabled={profile?.kyc_status === 'approved'} className="input-premium font-mono" placeholder="IT0123..." />
+                          <p className="text-base sm:text-lg font-black text-white tracking-tight mb-1.5">{conv.program_id || 'Lead Finanziario'}</p>
+                          <p className="text-[11px] font-mono text-slate-500">{new Date(conv.created_at).toLocaleString()}</p>
                         </div>
-                      )}
-                      <div className="md:col-span-2">
-                        <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Indirizzo Sede Legale / Residenza</label>
-                        <input type="text" value={billing.address} onChange={(e) => setBilling({...billing, address: e.target.value})} disabled={profile?.kyc_status === 'approved'} className="input-premium" placeholder="Via, Numero, CAP, Città" />
+                        <div className="text-right">
+                          <p className={`text-2xl sm:text-3xl font-black font-mono tracking-tight drop-shadow-md mb-1.5 ${conv.status === 'approved' ? 'text-emerald-400' : conv.status === 'rejected' ? 'text-rose-500' : 'text-amber-400'}`}>+€{conv.amount?.toFixed(2)}</p>
+                          <p className={`text-[10px] uppercase tracking-widest font-black ${conv.status === 'approved' ? 'text-emerald-500' : 'text-slate-500'}`}>{conv.status}</p>
+                        </div>
                       </div>
-                      
-                      <div className="md:col-span-2 mt-4 pt-10 border-t border-white/5">
-                        <label className="block text-[11px] font-black text-emerald-500 uppercase tracking-widest mb-5 flex items-center gap-3"><span className="text-2xl drop-shadow-[0_0_10px_rgba(16,185,129,0.8)]">🔒</span> IBAN Erogazione Fondi (Circuito SEPA)</label>
-                        <input type="text" value={billing.payment_info} onChange={(e) => setBilling({...billing, payment_info: e.target.value.toUpperCase()})} disabled={profile?.kyc_status === 'approved'} className="input-premium text-xl sm:text-3xl font-mono uppercase tracking-[0.25em] border-emerald-500/40 focus:border-emerald-500 bg-emerald-500/5 text-emerald-400 py-6" placeholder="IT00X00000000000000000" />
-                      </div>
-                    </div>
-
-                    {(!profile?.kyc_status || profile?.kyc_status === 'none' || profile?.kyc_status === 'pending') && (
-                      <div className="pt-6 flex justify-end">
-                        <button onClick={handleSaveSettings} disabled={savingSettings || profile?.kyc_status === 'approved'} className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-black text-[13px] px-16 py-6 rounded-2xl transition-all shadow-[0_10px_30px_rgba(16,185,129,0.4)] active:scale-95 uppercase tracking-widest disabled:opacity-50 hover:-translate-y-1">
-                          {savingSettings ? 'Crittografia...' : 'Sincronizza Dati Fiscali'}
-                        </button>
+                    ))}
+                    {conversions.length === 0 && (
+                      <div className="py-20 text-center border-2 border-dashed border-white/10 rounded-[2rem] bg-white/[0.01]">
+                        <span className="text-5xl opacity-20 mb-6 block">🔌</span>
+                        <p className="text-[12px] font-black text-slate-500 uppercase tracking-widest">In attesa dei primi log dal server.</p>
                       </div>
                     )}
                   </div>
-                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: MARKETPLACE */}
+          {activeTab === 'marketplace' && (
+             <div className="space-y-8">
+                <div className="pb-6 border-b border-white/5 stagger-1">
+                  <h1 className="text-4xl sm:text-6xl font-black text-white tracking-tight text-gradient mb-4">Marketplace B2B</h1>
+                  <p className="text-base text-slate-400 font-medium leading-relaxed max-w-3xl">Accesso diretto ai programmi di acquisizione istituzionali. I margini esposti rappresentano il Payout Netto garantito all'affiliato.</p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 sm:gap-8">
+                  {offers.map((offer, i) => (
+                    <div key={offer.id} className="card-glass card-glass-hover p-8 sm:p-10 flex flex-col relative group overflow-hidden" style={{animation: `slideUpFade 0.5s ease-out ${0.1 + (i*0.05)}s forwards`, opacity: 0}}>
+                      <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/5 rounded-bl-[100%] pointer-events-none group-hover:scale-125 transition-transform duration-700"></div>
+                      
+                      <div className="flex items-start gap-6 mb-8 border-b border-white/5 pb-8 relative z-10">
+                        <SafeImage src={offer.image_url} alt={offer.name} className="w-16 h-16 sm:w-20 sm:h-20 bg-white" />
+                        <div className="flex-1">
+                          <h4 className="font-black text-white text-2xl sm:text-3xl tracking-tight leading-none group-hover:text-blue-400 transition-colors mb-3">{offer.name}</h4>
+                          <div className="flex items-center gap-3">
+                            <span className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-lg ${offer.payout_type === 'CPL' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'}`}>{offer.payout_type || 'CPA'}</span>
+                            <button onClick={() => {setSelectedOffer(offer); setIsOfferModalOpen(true);}} className="text-[9px] text-slate-500 hover:text-white uppercase tracking-widest font-black transition-colors flex items-center gap-1">Policy ➔</button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mb-8 relative z-10">
+                        <p className="text-[10px] uppercase font-black text-slate-500 tracking-widest mb-2">Margine Netto</p>
+                        <p className="font-black font-mono text-emerald-400 text-4xl sm:text-5xl tracking-tight drop-shadow-[0_0_15px_rgba(16,185,129,0.2)]">€{offer.partner_payout?.toFixed(2)}</p>
+                      </div>
+
+                      <div className="mt-auto flex flex-col sm:flex-row gap-3 relative z-10">
+                        <button onClick={(e) => openSiteModal(offer, e)} className="flex-1 text-[10px] font-black text-slate-300 bg-white/5 border border-white/10 px-4 py-4 rounded-xl hover:bg-white/10 transition-colors uppercase tracking-widest active:scale-95 text-center">Infrastruttura</button>
+                        <button onClick={(e) => handleGetLink(offer, e)} className="flex-[2] btn-shimmer text-[10px] font-black uppercase tracking-widest text-white px-4 py-4 rounded-xl active:scale-95 transition-all text-center">Ottieni Link S2S</button>
+                      </div>
+                    </div>
+                  ))}
+                  {offers.length === 0 && <div className="col-span-full py-24 text-center stagger-2"><p className="text-sm font-black text-slate-500 uppercase tracking-widest animate-pulse">Sincronizzazione inventario in corso...</p></div>}
+                </div>
+             </div>
+          )}
+          
+          {/* TAB 3: ASSETS */}
+          {activeTab === 'assets' && (
+            <div className="space-y-8 max-w-4xl">
+              <div className="pb-6 border-b border-white/5 stagger-1">
+                <h1 className="text-4xl sm:text-6xl font-black text-white tracking-tight text-gradient mb-4">Sviluppo Asset</h1>
+                <p className="text-base text-slate-400 leading-relaxed font-medium">Richiedi la costruzione di nuovi Hub o dichiara sorgenti esterne per abilitare il Tracker S2S.</p>
+              </div>
+              
+              <div className="card-glass p-8 sm:p-14 relative overflow-hidden stagger-2">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 mb-12">
+                  <div>
+                    <h2 className="text-3xl font-black text-white tracking-tight mb-3">1. Audit Canale Esterno</h2>
+                    <p className="text-sm text-slate-400 max-w-md leading-relaxed">Dichiara domini o profili social per la validazione Compliance.</p>
+                  </div>
+                  <StatusBadge status={profile?.traffic_status} />
+                </div>
+
+                <div className="space-y-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">URL Principale</label>
+                      <input type="url" value={billing.registered_website} onChange={(e) => setBilling({...billing, registered_website: e.target.value})} className="input-premium font-mono text-blue-300" placeholder="https://..." />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Strategia & Budget Mensile</label>
+                      <input type="text" value={billing.traffic_volume} onChange={(e) => setBilling({...billing, traffic_volume: e.target.value})} className="input-premium" placeholder="Es. Meta Ads / 1000€" />
+                    </div>
+                  </div>
+                  
+                  <div className="pt-2 flex justify-end">
+                    <button onClick={handleSaveSettings} disabled={savingSettings} className="w-full sm:w-auto btn-shimmer text-white font-black text-[12px] px-12 py-5 rounded-2xl active:scale-95 uppercase tracking-widest disabled:opacity-50">
+                      {savingSettings ? 'Inoltro Sicuro...' : 'Sottoponi a Dipartimento Compliance'}
+                    </button>
+                  </div>
+                </div>
+
+                {profile?.traffic_notes && (
+                  <div className="mt-12 p-8 sm:p-10 rounded-[2rem] border border-blue-500/20 bg-gradient-to-br from-blue-900/10 to-transparent relative overflow-hidden">
+                    <div className="absolute left-0 top-0 w-1.5 h-full bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,1)]"></div>
+                    <h3 className="text-sm font-black text-blue-400 mb-4 uppercase tracking-widest flex items-center gap-3">Storico Briefing Operativi</h3>
+                    <textarea readOnly value={profile.traffic_notes} className="bg-black/60 border border-white/5 text-slate-300 p-6 rounded-2xl font-mono text-xs sm:text-sm w-full resize-none outline-none hide-scrollbar leading-relaxed" rows={6} />
+                  </div>
+                )}
+              </div>
+
+              <div className="card-glass p-8 sm:p-14 relative overflow-hidden border-indigo-500/30 stagger-3">
+                <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/10 to-transparent pointer-events-none"></div>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-6 mb-8 relative z-10">
+                  <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight leading-none">2. Deploy "Turn-Key" Hub</h2>
+                  <span className="bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 font-black px-5 py-2.5 rounded-xl text-[10px] uppercase tracking-widest shadow-[0_0_20px_rgba(79,70,229,0.3)]">Servizio Incluso</span>
+                </div>
+                <p className="text-base text-slate-300 mb-10 leading-relaxed relative z-10 max-w-2xl font-medium">L'IT progetterà per te Hub di comparazione ad alta conversione. Ogni nuovo URL crittografato verrà consegnato nel Terminale.</p>
+                <button onClick={() => {setSelectedOffer(null); setIsSiteModalOpen(true);}} className="w-full sm:w-auto bg-white text-black hover:bg-slate-200 font-black text-[12px] uppercase tracking-widest px-14 py-6 rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.2)] transition-all hover:scale-[1.02] active:scale-95 relative z-10">
+                  Avvia Nuova Richiesta IT
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: KYC */}
+          {activeTab === 'kyc' && (
+             <div className="space-y-8 max-w-4xl">
+               <div className="pb-6 border-b border-white/5 stagger-1">
+                 <h1 className="text-4xl sm:text-6xl font-black text-white tracking-tight text-gradient mb-4">Tesoreria Fiscale</h1>
+                 <p className="text-base text-slate-400 font-medium leading-relaxed">Dati protetti tramite crittografia AES-256. I pagamenti esigibili vengono liquidati automaticamente su circuito SEPA al 15 del mese.</p>
                </div>
-            )}
-          </div>
-        </main>
+               
+               <div className="card-glass p-8 sm:p-14 relative overflow-hidden stagger-2">
+                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-12 border-b border-white/5 pb-10">
+                   <h2 className="text-3xl font-black text-white tracking-tight">Profilo Beneficiario</h2>
+                   <div className="bg-black/40 px-5 py-2.5 rounded-xl border border-white/10 text-[11px] font-black uppercase tracking-widest flex items-center gap-3 shadow-inner">
+                     Stato KYC: {profile?.kyc_status === 'approved' ? <span className="text-emerald-400 flex items-center gap-1.5"><span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span> Verificato</span> : profile?.kyc_status === 'pending' ? <span className="text-amber-400">In Audit</span> : <span className="text-slate-500">Mancante</span>}
+                   </div>
+                 </div>
+
+                 <div className="space-y-8 relative z-10">
+                  <div className="flex p-2 bg-black/50 rounded-2xl w-full sm:w-max border border-white/5 shadow-inner">
+                    <button onClick={() => setBilling({...billing, entity_type: 'privato'})} disabled={profile?.kyc_status === 'approved'} className={`px-12 py-4 text-[11px] font-black rounded-xl transition-all uppercase tracking-widest disabled:opacity-50 ${billing.entity_type === 'privato' ? 'bg-white text-black shadow-lg' : 'text-slate-500 hover:text-white'}`}>Privato</button>
+                    <button onClick={() => setBilling({...billing, entity_type: 'azienda'})} disabled={profile?.kyc_status === 'approved'} className={`px-12 py-4 text-[11px] font-black rounded-xl transition-all uppercase tracking-widest disabled:opacity-50 ${billing.entity_type === 'azienda' ? 'bg-white text-black shadow-lg' : 'text-slate-500 hover:text-white'}`}>Impresa / P.IVA</button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-white/[0.02] p-8 sm:p-10 rounded-[2.5rem] border border-white/5">
+                    <div className="md:col-span-2">
+                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Intestatario Fiscale Conto</label>
+                      <input type="text" value={billing.full_name} onChange={(e) => setBilling({...billing, full_name: e.target.value})} disabled={profile?.kyc_status === 'approved'} className="input-premium" placeholder="Nome Completo o Ragione Sociale" />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Codice Fiscale</label>
+                      <input type="text" value={billing.tax_id} onChange={(e) => setBilling({...billing, tax_id: e.target.value.toUpperCase()})} disabled={profile?.kyc_status === 'approved'} className="input-premium uppercase font-mono" placeholder="RSSMRA..." />
+                    </div>
+                    {billing.entity_type === 'azienda' && (
+                      <div>
+                        <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Partita IVA</label>
+                        <input type="text" value={billing.vat_number} onChange={(e) => setBilling({...billing, vat_number: e.target.value})} disabled={profile?.kyc_status === 'approved'} className="input-premium font-mono" placeholder="IT0123..." />
+                      </div>
+                    )}
+                    <div className="md:col-span-2">
+                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Indirizzo Sede Legale / Residenza</label>
+                      <input type="text" value={billing.address} onChange={(e) => setBilling({...billing, address: e.target.value})} disabled={profile?.kyc_status === 'approved'} className="input-premium" placeholder="Via, Numero, CAP, Città" />
+                    </div>
+                    
+                    <div className="md:col-span-2 mt-4 pt-10 border-t border-white/5">
+                      <label className="block text-[11px] font-black text-emerald-500 uppercase tracking-widest mb-5 flex items-center gap-3"><span className="text-2xl drop-shadow-[0_0_10px_rgba(16,185,129,0.8)]">🔒</span> IBAN Erogazione Fondi (Circuito SEPA)</label>
+                      <input type="text" value={billing.payment_info} onChange={(e) => setBilling({...billing, payment_info: e.target.value.toUpperCase()})} disabled={profile?.kyc_status === 'approved'} className="input-premium text-xl sm:text-3xl font-mono uppercase tracking-[0.25em] border-emerald-500/40 focus:border-emerald-500 bg-emerald-500/5 text-emerald-400 py-6" placeholder="IT00X00000000000000000" />
+                    </div>
+                  </div>
+
+                  {(!profile?.kyc_status || profile?.kyc_status === 'none' || profile?.kyc_status === 'pending') && (
+                    <div className="pt-6 flex justify-end">
+                      <button onClick={handleSaveSettings} disabled={savingSettings || profile?.kyc_status === 'approved'} className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-black text-[13px] px-16 py-6 rounded-2xl transition-all shadow-[0_10px_30px_rgba(16,185,129,0.4)] active:scale-95 uppercase tracking-widest disabled:opacity-50 hover:-translate-y-1">
+                        {savingSettings ? 'Crittografia...' : 'Sincronizza Dati Fiscali'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+               </div>
+             </div>
+          )}
+        </div>
+      </main>
       )}
 
       {/* MOBILE FLOATING BOTTOM NAV (Stile Dynamic Island) */}
