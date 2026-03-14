@@ -1,120 +1,143 @@
 "use client";
 
 import { useState } from 'react';
-import { supabase } from '../../lib/supabaseClient';
-import { useRouter } from 'next/navigation';
+import { supabase } from '../lib/supabaseClient';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function Login() {
+  const [email, setEmail] = useState('');
+  const [status, setStatus] = useState('idle'); // 'idle', 'loading', 'success', 'error'
+  const [errorMessage, setErrorMessage] = useState('');
   const router = useRouter();
-  const [formData, setFormData] = useState({ email: '', password: '' });
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState({ text: '', type: '' });
-
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setMessage({ text: '', type: '' });
+    setStatus('loading');
+    setErrorMessage('');
 
-    try {
-      // 1. Tenta l'autenticazione
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: formData.email,
-        password: formData.password,
-      });
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        // Reindirizza al nostro Gateway di sicurezza animato
+        emailRedirectTo: `${window.location.origin}/auth/verify`,
+      },
+    });
 
-      if (error) throw error;
-
-      if (data.user) {
-        // 2. Controllo Sicurezza IP (Gatekeeper)
-        const res = await fetch('https://api.ipify.org?format=json');
-        const { ip: current_ip } = await res.json();
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('last_ip')
-          .eq('id', data.user.id)
-          .single();
-
-        // Se ha già un IP registrato ed è DIVERSO da quello attuale
-        if (profile && profile.last_ip && profile.last_ip !== current_ip) {
-          
-          // DISTRUGGE LA SESSIONE (Non lo fa entrare)
-          await supabase.auth.signOut();
-
-          // INVIA IL LINK DI CONFERMA ALL'EMAIL (Magic Link)
-          const { error: otpError } = await supabase.auth.signInWithOtp({
-            email: formData.email,
-          });
-
-          if (otpError) throw otpError;
-
-          setMessage({ 
-            text: '⚠️ Rilevato accesso da un nuovo IP. Per sicurezza, ti abbiamo inviato un Link di Conferma via email. Cliccalo per autorizzare questo dispositivo.', 
-            type: 'error' 
-          });
-          setLoading(false);
-          return; // Ferma il codice, non va alla dashboard
-        }
-
-        // Se l'IP è corretto o è il primo accesso: Aggiorna l'IP fidato e fallo entrare
-        await supabase.from('profiles').update({ last_ip: current_ip }).eq('id', data.user.id);
-        router.push('/dashboard');
+    if (error) {
+      // GESTIONE ELEGANTE DEI 60 SECONDI (Rate Limit)
+      if (error.status === 429 || error.message.includes('rate limit') || error.message.includes('seconds')) {
+        setErrorMessage('Sicurezza Anti-Spam: Attendi 60 secondi prima di richiedere un nuovo link.');
+      } else {
+        setErrorMessage('Credenziali non valide o errore di rete. Riprova.');
       }
-    } catch (error) {
-      setMessage({ text: 'Credenziali non valide o errore di rete.', type: 'error' });
-      setLoading(false);
+      setStatus('error');
+      setTimeout(() => setStatus('idle'), 5000);
+    } else {
+      setStatus('success');
     }
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-x-hidden bg-[#F4F7FA] py-12 px-4 sm:px-6 lg:px-8 font-sans">
+    <div className="min-h-screen bg-[#02040A] text-slate-300 font-sans flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden selection:bg-blue-500/30">
       
+      {/* MOTORE CSS E ANIMAZIONI */}
       <style dangerouslySetInnerHTML={{__html: `
-        .light-panel { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 1); box-shadow: 0 20px 40px -10px rgba(0,0,0,0.08); }
-        .data-input { background: #F8FAFC; border: 1px solid #E2E8F0; padding: 16px; border-radius: 12px; width: 100%; outline: none; transition: all 0.3s ease; }
-        .data-input:focus { border-color: #3B82F6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(30px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes pulseGlow { 0%, 100% { opacity: 0.3; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.05); } }
+        .glass-panel { background: rgba(11, 18, 33, 0.6); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); border: 1px solid rgba(255, 255, 255, 0.05); box-shadow: 0 40px 80px rgba(0,0,0,0.8); border-radius: 2rem; animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .input-premium { background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.08); color: white; padding: 18px 20px; border-radius: 1rem; width: 100%; outline: none; transition: all 0.3s ease; font-size: 0.95rem; font-weight: 500; }
+        .input-premium:focus { border-color: #3B82F6; background: rgba(0, 0, 0, 0.7); box-shadow: inset 0 0 0 1px #3B82F6, 0 0 20px rgba(59,130,246,0.15); }
+        .bg-grid { background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px); background-size: 40px 40px; }
       `}} />
 
-      {/* Sfondo Animato */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <div className="absolute top-[-10%] left-[-5%] w-[500px] h-[500px] rounded-full mix-blend-multiply filter blur-[100px] bg-blue-200/60 animate-pulse"></div>
-        <div className="absolute bottom-[-10%] right-[-5%] w-[600px] h-[600px] rounded-full mix-blend-multiply filter blur-[120px] bg-indigo-200/50"></div>
-      </div>
+      {/* SFONDI E LUCI */}
+      <div className="absolute inset-0 z-0 bg-grid opacity-50 pointer-events-none"></div>
+      <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-indigo-600/20 rounded-full blur-[150px] pointer-events-none" style={{ animation: 'pulseGlow 8s infinite' }}></div>
 
-      <div className="relative z-10 w-full max-w-md light-panel rounded-[2.5rem] p-8 sm:p-12">
-        <div className="text-center mb-10">
-          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/30">
-            <span className="text-white text-2xl font-black">F</span>
-          </div>
-          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Accedi al Network</h2>
-          <p className="text-sm text-slate-500 mt-2 font-medium">Infrastruttura B2B privata per affiliati finance.</p>
-        </div>
+      {/* TASTO BACK */}
+      <Link href="/" className="absolute top-8 left-8 z-50 text-[10px] font-black text-slate-500 uppercase tracking-widest hover:text-white transition-colors bg-white/5 hover:bg-white/10 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-md flex items-center gap-2">
+        <span className="text-sm">←</span> Home
+      </Link>
+
+      <div className="w-full max-w-md z-10">
         
-        <form onSubmit={handleLogin} className="space-y-6">
-          <div className="space-y-4">
-            <input type="email" required name="email" value={formData.email} onChange={handleChange} className="data-input text-sm" placeholder="Email Operativa" />
-            <input type="password" required name="password" value={formData.password} onChange={handleChange} className="data-input text-sm" placeholder="Password" />
+        {/* LOGO */}
+        <div className="flex justify-center mb-10">
+          <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-[1.2rem] flex items-center justify-center font-black text-white text-3xl shadow-[0_0_30px_rgba(59,130,246,0.5)] border border-white/10">
+            F
           </div>
+        </div>
 
-          {message.text && (
-            <div className={`p-4 rounded-xl text-xs font-bold leading-relaxed ${message.type === 'error' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
-              {message.text}
+        <div className="glass-panel p-8 sm:p-12 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-600 to-indigo-500 shadow-[0_0_20px_rgba(59,130,246,0.8)]"></div>
+          
+          <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-2 text-center">Terminale</h2>
+          <p className="text-sm text-slate-400 text-center font-medium mb-10">Connessione sicura al Network B2B.</p>
+
+          {/* STATO SUCCESSO */}
+          {status === 'success' ? (
+            <div className="text-center animate-[fadeUp_0.5s_ease-out_forwards]">
+              <div className="w-20 h-20 bg-blue-500/10 border border-blue-500/30 text-blue-400 rounded-full flex items-center justify-center text-4xl mx-auto mb-6 shadow-[0_0_30px_rgba(59,130,246,0.3)]">
+                ✉️
+              </div>
+              <h3 className="text-2xl font-black text-white mb-3">Link Inviato</h3>
+              <p className="text-sm text-slate-400 leading-relaxed mb-8">
+                Abbiamo inviato un pacchetto di accesso crittografato a <strong className="text-white">{email}</strong>. Clicca sul link nell'email per accedere.
+              </p>
+              <button onClick={() => setStatus('idle')} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors underline underline-offset-4">
+                Richiedi un nuovo link
+              </button>
             </div>
+          ) : (
+            /* FORM DI LOGIN */
+            <form onSubmit={handleLogin} className="space-y-6">
+              
+              <div>
+                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Email Account</label>
+                <input 
+                  type="email" 
+                  required
+                  value={email} 
+                  onChange={(e) => setEmail(e.target.value)} 
+                  className="input-premium font-mono text-blue-200" 
+                  placeholder="nome@azienda.com" 
+                  disabled={status === 'loading'}
+                />
+              </div>
+
+              {/* ERRORE ANIMATO CON GESTIONE 60 SECONDI */}
+              {status === 'error' && (
+                <div className="bg-rose-900/20 border border-rose-500/30 p-4 rounded-xl flex items-center gap-3 animate-[fadeUp_0.3s_ease-out_forwards]">
+                  <span className="text-rose-500 text-xl">⚠️</span>
+                  <p className="text-[11px] font-bold text-rose-200/80 leading-relaxed">{errorMessage}</p>
+                </div>
+              )}
+
+              <div className="pt-4">
+                <button 
+                  type="submit" 
+                  disabled={status === 'loading'} 
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black text-[12px] px-8 py-5 rounded-2xl active:scale-95 uppercase tracking-widest transition-all disabled:opacity-50 flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(59,130,246,0.3)]"
+                >
+                  {status === 'loading' ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                      Verifica Rete...
+                    </>
+                  ) : 'Login Secure S2S'}
+                </button>
+              </div>
+            </form>
           )}
+        </div>
 
-          <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm px-6 py-4 rounded-xl shadow-md active:scale-95 transition-all disabled:opacity-50 uppercase tracking-widest mt-4">
-            {loading ? 'Autenticazione...' : 'Accedi al Terminale'}
-          </button>
-        </form>
-
-        <p className="text-center text-xs text-slate-500 mt-8">
-          Non hai ancora l'accesso? <Link href="/signup" className="font-bold text-blue-600 hover:text-blue-800 uppercase tracking-widest">Invia Candidatura</Link>
+        <p className="text-center mt-8 text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+          Vuoi unirti al network? <Link href="/signup" className="text-blue-500 hover:text-blue-400 ml-1 transition-colors">Invia Candidatura</Link>
         </p>
+
       </div>
     </div>
   );
