@@ -112,4 +112,5 @@ export default function Login() {
         </p>
       </div>
     </div>
-  );
+);
+                   }

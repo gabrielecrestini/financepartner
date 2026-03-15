@@ -145,3 +145,4 @@ export default function AuthGateway() {
       `}} />
     </div>
   );
+}
