@@ -786,7 +786,7 @@ export default function Dashboard() {
           )}
         </div>
       </main>
-      }
+      
 
       {/* MOBILE FLOATING BOTTOM NAV (Stile Dynamic Island) */}
       <div className="md:hidden fixed bottom-6 left-4 right-4 z-50 flex justify-center">
