@@ -38,8 +38,8 @@ export default function Dashboard() {
   const [animKey, setAnimKey] = useState(0); 
   const [loading, setLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
-  const [securityLock, setSecurityLock] = useState(false); // Blocco Dispositivo Sconosciuto
-  const [detectedIp, setDetectedIp] = useState(''); // IP Estetico per mostrare da dove viene l'intrusione
+  const [securityLock, setSecurityLock] = useState(false);
+  const [detectedIp, setDetectedIp] = useState('');
   
   const mainContentRef = useRef(null);
 
@@ -84,10 +84,8 @@ export default function Dashboard() {
 
       const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       
-      // MOTORE DI RICONOSCIMENTO DISPOSITIVO LOCALE (Fingerprinting Base)
       const isDeviceAuthorized = localStorage.getItem('fp_device_auth_v1');
       
-      // Recuperiamo comunque l'IP in modo silenzioso solo per farlo vedere nell'avviso se c'è un'intrusione
       try {
         const res = await fetch('https://api.ipify.org?format=json');
         const { ip } = await res.json();
@@ -95,13 +93,11 @@ export default function Dashboard() {
       } catch (e) { setDetectedIp('Sconosciuto (IP Nascosto)'); }
 
       if (!isDeviceAuthorized && profileData?.traffic_status === 'approved') {
-        // Se il dispositivo non ha il "biscottino" locale, facciamo scattare il Terminale Rosso
         setSecurityLock(true);
       }
 
       setProfile(profileData);
       
-      // Carichiamo i dati in background
       if (profileData?.traffic_status === 'approved') {
         setBilling({ full_name: profileData.full_name || '', entity_type: profileData.entity_type || 'privato', vat_number: profileData.vat_number || '', tax_id: profileData.tax_id || '', address: profileData.address || '', payment_info: profileData.payment_info || '', registered_website: profileData.registered_website || '', traffic_volume: profileData.traffic_volume || '' });
 
@@ -136,7 +132,6 @@ export default function Dashboard() {
         });
         setChartData(dailyData);
 
-        // Mostra popup onboarding se non l'ha mai visto (e se non ha il blocco sicurezza attivo)
         if (totalClicks === 0 && !profileData.assigned_site_link && isDeviceAuthorized) {
           setTimeout(() => setIsStrategyModalOpen(true), 1200);
         }
@@ -146,19 +141,11 @@ export default function Dashboard() {
     fetchDashboardData();
   }, [isMounted, router]);
 
-  // --- AZIONI SBLOCCO DISPOSITIVO LOCALE ---
   const authorizeDevice = async () => {
-    // Registra questo browser/dispositivo come sicuro
     localStorage.setItem('fp_device_auth_v1', 'true');
-    
-    // Log di Sicurezza (Opzionale)
     await supabase.from('notifications').insert([{ user_id: user.id, title: '📱 Nuovo Dispositivo Verificato', message: `Hai autorizzato con successo l'accesso da un nuovo dispositivo. IP Rilevato: ${detectedIp}.`, type: 'success' }]);
-    
-    // Rimuove il blocco visivo
     setSecurityLock(false);
     showToast("Dispositivo Autorizzato e Registrato.", "success");
-    
-    // Modale strategia se è proprio il primissimo accesso
     if (stats.clicks === 0 && !profile.assigned_site_link) setTimeout(() => setIsStrategyModalOpen(true), 800);
   };
 
@@ -296,7 +283,7 @@ export default function Dashboard() {
   }
 
   // =======================================================================
-  // GATEKEEPER: SALA D'ATTESA VIP (Ultra Premium)
+  // GATEKEEPER: SALA D'ATTESA VIP
   // =======================================================================
   if (profile && profile.traffic_status !== 'approved') {
     return (
@@ -424,7 +411,7 @@ export default function Dashboard() {
         .stagger-3 { animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.25s forwards; opacity: 0; }
         .stagger-4 { animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.35s forwards; opacity: 0; }
         
-        .modal-animate { animation: scaleInModal 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .modal-animate { animation: scaleInModal 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 
         .card-glass { background: rgba(15, 23, 42, 0.3); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); border: 1px solid rgba(255, 255, 255, 0.03); border-radius: 1.5rem; transition: all 0.3s ease; }
         .card-glass-hover:hover { border-color: rgba(255, 255, 255, 0.08); box-shadow: 0 30px 60px -15px rgba(0,0,0,0.8); transform: translateY(-4px); background: rgba(15, 23, 42, 0.5); }
@@ -458,6 +445,32 @@ export default function Dashboard() {
             {settingsMsg.text}
           </div>
         </div>
+      )}
+
+      {/* MODALE NOTIFICHE (FIX MOBILE & DESKTOP) */}
+      {showNotifications && (
+        <>
+          {/* Overlay scuro solo su mobile per bloccare click fuori e risaltare il popup */}
+          <div className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[90]" onClick={() => setShowNotifications(false)}></div>
+          
+          <div className="fixed top-20 left-4 right-4 md:absolute md:top-24 md:left-auto md:right-10 z-[100] md:w-[420px] card-glass p-1 shadow-[0_40px_80px_rgba(0,0,0,0.9)] rounded-[2rem] overflow-hidden modal-animate border border-white/10 flex flex-col max-h-[75vh]">
+            <div className="p-5 bg-white/5 border-b border-white/5 font-black text-white uppercase tracking-widest text-[10px] flex justify-between items-center rounded-t-[1.8rem] shrink-0">
+              <span className="flex items-center gap-2"><span className="text-sm">🔔</span> System Log</span>
+              <button onClick={() => setShowNotifications(false)} className="text-slate-400 hover:text-white bg-white/5 w-8 h-8 rounded-full flex items-center justify-center transition-colors">✕</button>
+            </div>
+            <div className="overflow-y-auto p-3 hide-scrollbar flex-1">
+              {notifications.length === 0 ? (
+                <p className="p-10 text-[11px] text-slate-500 text-center uppercase tracking-widest font-black">Nessun evento registrato</p>
+              ) : notifications.map(n => (
+                <div key={n.id} className={`p-5 mb-3 rounded-2xl text-sm transition-all ${n.is_read ? 'bg-white/[0.02] border border-white/[0.02]' : 'bg-gradient-to-br from-blue-600/10 to-transparent border border-blue-500/20 shadow-lg'}`}>
+                  <h4 className="font-black text-white mb-2 text-[12px]">{n.title}</h4>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">{n.message}</p>
+                  <p className="text-[9px] text-blue-400 mt-3 font-mono">{new Date(n.created_at).toLocaleString()}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
       )}
 
       {/* HEADER MOBILE */}
@@ -531,30 +544,12 @@ export default function Dashboard() {
                   <button onClick={() => setIsStrategyModalOpen(true)} className="flex items-center gap-2.5 bg-white/[0.03] hover:bg-white/[0.08] border border-white/10 text-white px-6 py-4 rounded-[1.2rem] font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg hover:-translate-y-1">
                     <span className="text-lg">🧠</span> Playbook
                   </button>
-                  <button onClick={markNotificationsAsRead} className="relative w-14 h-14 bg-white/[0.03] hover:bg-white/[0.08] rounded-[1.2rem] flex items-center justify-center text-2xl transition-all border border-white/10 text-white shadow-lg hover:-translate-y-1">
+                  {/* Campanella Desktop */}
+                  <button onClick={markNotificationsAsRead} className="hidden md:flex relative w-14 h-14 bg-white/[0.03] hover:bg-white/[0.08] rounded-[1.2rem] items-center justify-center text-2xl transition-all border border-white/10 text-white shadow-lg hover:-translate-y-1">
                     🔔 {unreadCount > 0 && <span className="absolute -top-2 -right-2 w-6 h-6 bg-blue-600 text-white text-[11px] font-black rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(37,99,235,0.8)] animate-bounce border-2 border-[#020617]">{unreadCount}</span>}
                   </button>
                 </div>
               </div>
-
-              {/* Notifiche */}
-              {showNotifications && (
-                <div className="absolute top-32 right-12 z-50 w-[400px] card-glass p-2 shadow-[0_30px_60px_rgba(0,0,0,0.8)] rounded-3xl overflow-hidden modal-animate border border-white/10">
-                  <div className="p-5 bg-white/5 border-b border-white/5 font-black text-white uppercase tracking-widest text-[10px] flex justify-between items-center rounded-t-[1.5rem]">
-                    <span>Centro Notifiche B2B</span>
-                    <button onClick={() => setShowNotifications(false)} className="text-slate-400 hover:text-white bg-white/5 w-8 h-8 rounded-full flex items-center justify-center">✕</button>
-                  </div>
-                  <div className="max-h-[60vh] overflow-y-auto p-3 hide-scrollbar">
-                    {notifications.length === 0 ? <p className="p-10 text-[11px] text-slate-500 text-center uppercase tracking-widest font-black">Nessun evento registrato</p> : notifications.map(n => (
-                      <div key={n.id} className={`p-6 mb-3 rounded-[1.5rem] text-sm transition-all ${n.is_read ? 'bg-transparent opacity-60' : 'bg-gradient-to-br from-blue-600/10 to-transparent border border-blue-500/20 shadow-lg'}`}>
-                        <h4 className="font-black text-white mb-2">{n.title}</h4>
-                        <p className="text-xs text-slate-300 leading-relaxed">{n.message}</p>
-                        <p className="text-[10px] text-blue-400 mt-4 font-mono">{new Date(n.created_at).toLocaleString()}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Asset Multi-Link Terminal */}
               {profile?.assigned_site_link && (
@@ -786,9 +781,8 @@ export default function Dashboard() {
           )}
         </div>
       </main>
-      
 
-      {/* MOBILE FLOATING BOTTOM NAV (Stile Dynamic Island) */}
+      {/* MOBILE FLOATING BOTTOM NAV */}
       <div className="md:hidden fixed bottom-6 left-4 right-4 z-50 flex justify-center">
         <nav className="mobile-nav-glass w-full max-w-sm rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.9)] overflow-hidden">
           <div className="flex justify-around p-2">
