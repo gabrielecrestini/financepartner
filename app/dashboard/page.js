@@ -3,19 +3,20 @@
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
-// Componente intelligente per loghi - Effetto Cristallo
+// Componente Logo Cristallo
 const SafeImage = ({ src, alt, fallbackIcon = "🏦", className }) => {
   const [error, setError] = useState(false);
   if (!src || error) {
     return (
-      <div className={`flex items-center justify-center bg-gradient-to-br from-[#0F172A] to-[#020617] border border-white/5 rounded-2xl shadow-[inset_0_2px_10px_rgba(255,255,255,0.02)] ${className}`}>
-        <span className="opacity-30 text-2xl drop-shadow-lg">{fallbackIcon}</span>
+      <div className={`flex items-center justify-center bg-gradient-to-br from-[#0F172A] to-[#020617] border border-white/5 rounded-xl shadow-inner ${className}`}>
+        <span className="opacity-30 text-xl">{fallbackIcon}</span>
       </div>
     );
   }
   return (
-    <div className={`bg-white/5 backdrop-blur-xl rounded-2xl flex items-center justify-center p-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.5)] border border-white/10 ${className}`}>
+    <div className={`bg-white/5 backdrop-blur-md rounded-xl flex items-center justify-center p-2 shadow-lg border border-white/10 ${className}`}>
       <img src={src} alt={alt} onError={() => setError(true)} className="w-full h-full object-contain filter drop-shadow-md" />
     </div>
   );
@@ -32,8 +33,9 @@ export default function Dashboard() {
   const [chartData, setChartData] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isLive, setIsLive] = useState(false);
   
-  // UI & Sicurezza
+  // UI
   const [activeTab, setActiveTab] = useState('overview'); 
   const [animKey, setAnimKey] = useState(0); 
   const [loading, setLoading] = useState(true);
@@ -41,9 +43,7 @@ export default function Dashboard() {
   const [securityLock, setSecurityLock] = useState(false);
   const [detectedIp, setDetectedIp] = useState('');
   
-  const mainContentRef = useRef(null);
-
-  // Form & Modali
+  // Form
   const [billing, setBilling] = useState({ full_name: '', entity_type: 'privato', vat_number: '', tax_id: '', address: '', payment_info: '', registered_website: '', traffic_volume: '' });
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState({ text: '', type: '' });
@@ -54,7 +54,6 @@ export default function Dashboard() {
   const [isStrategyModalOpen, setIsStrategyModalOpen] = useState(false);
   const [siteForm, setSiteForm] = useState({ whereToPromote: '', goals: '' });
   
-  // Gatekeeper
   const [gateForm, setGateForm] = useState({ url: '', strategy: '' });
   const [isSubmittingGate, setIsSubmittingGate] = useState(false);
 
@@ -74,83 +73,100 @@ export default function Dashboard() {
     localStorage.setItem('fp_active_tab', tab);
   };
 
+  const fetchDashboardData = async (currentUser) => {
+    const { data: profileData } = await supabase.from('profiles').select('*').eq('id', currentUser.id).single();
+    setProfile(profileData);
+    
+    if (profileData?.traffic_status === 'approved') {
+      setBilling({ full_name: profileData.full_name || '', entity_type: profileData.entity_type || 'privato', vat_number: profileData.vat_number || '', tax_id: profileData.tax_id || '', address: profileData.address || '', payment_info: profileData.payment_info || '', registered_website: profileData.registered_website || '', traffic_volume: profileData.traffic_volume || '' });
+
+      const [{ data: notifs }, { data: offersData }, { data: convData }, { data: clickData }] = await Promise.all([
+        supabase.from('notifications').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }),
+        supabase.from('offers').select('*'),
+        supabase.from('conversions').select('*').eq('partner_id', currentUser.id).order('created_at', { ascending: false }),
+        supabase.from('clicks').select('created_at').eq('affiliate_id', currentUser.id)
+      ]);
+
+      setNotifications(notifs || []);
+      setOffers(offersData || []);
+      setConversions(convData || []);
+
+      const clicks = clickData || [];
+      const totalClicks = clicks.length;
+      const convs = convData || [];
+      const totalApproved = profileData?.wallet_approved || 0;
+      const totalConversions = convs.filter(c => c.status === 'approved').length;
+
+      setStats({ clicks: totalClicks, epc: totalClicks > 0 ? (totalApproved / totalClicks) : 0, cr: totalClicks > 0 ? ((totalConversions / totalClicks) * 100) : 0 });
+
+      // Generazione Chart 7 Giorni
+      const last7Days = Array.from({length: 7}, (_, i) => {
+        const d = new Date(); d.setDate(d.getDate() - (6 - i));
+        return d.toISOString().split('T')[0];
+      });
+
+      const dailyData = last7Days.map(date => {
+        const dayClicks = clicks.filter(c => c.created_at.startsWith(date)).length;
+        const dayConvs = convs.filter(c => c.created_at.startsWith(date)).length;
+        return { date: date.split('-').slice(1).join('/'), clicks: dayClicks, conversions: dayConvs };
+      });
+      setChartData(dailyData);
+    }
+  };
+
   useEffect(() => {
     if (!isMounted) return;
 
-    const fetchDashboardData = async () => {
+    const initApp = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return router.push('/login');
       setUser(user);
 
-      const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      
       const isDeviceAuthorized = localStorage.getItem('fp_device_auth_v1');
-      
+      let ip = 'Sconosciuto';
       try {
         const res = await fetch('https://api.ipify.org?format=json');
-        const { ip } = await res.json();
+        ip = (await res.json()).ip;
         setDetectedIp(ip);
-      } catch (e) { setDetectedIp('Sconosciuto (IP Nascosto)'); }
+      } catch (e) {}
+
+      const { data: profileData } = await supabase.from('profiles').select('traffic_status').eq('id', user.id).single();
 
       if (!isDeviceAuthorized && profileData?.traffic_status === 'approved') {
         setSecurityLock(true);
       }
 
-      setProfile(profileData);
-      
-      if (profileData?.traffic_status === 'approved') {
-        setBilling({ full_name: profileData.full_name || '', entity_type: profileData.entity_type || 'privato', vat_number: profileData.vat_number || '', tax_id: profileData.tax_id || '', address: profileData.address || '', payment_info: profileData.payment_info || '', registered_website: profileData.registered_website || '', traffic_volume: profileData.traffic_volume || '' });
-
-        const { data: notifs } = await supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
-        setNotifications(notifs || []);
-
-        const { data: offersData } = await supabase.from('offers').select('*');
-        setOffers(offersData || []);
-
-        const { data: convData } = await supabase.from('conversions').select('*').eq('partner_id', user.id).order('created_at', { ascending: false });
-        setConversions(convData || []);
-
-        const { data: clickData } = await supabase.from('clicks').select('created_at').eq('affiliate_id', user.id);
-        const clicks = clickData || [];
-        const totalClicks = clicks.length;
-        
-        const convs = convData || [];
-        const totalApproved = profileData?.wallet_approved || 0;
-        const totalConversions = convs.filter(c => c.status === 'approved').length;
-
-        setStats({ clicks: totalClicks, epc: totalClicks > 0 ? (totalApproved / totalClicks) : 0, cr: totalClicks > 0 ? ((totalConversions / totalClicks) * 100) : 0 });
-
-        const last7Days = Array.from({length: 7}, (_, i) => {
-          const d = new Date(); d.setDate(d.getDate() - (6 - i));
-          return d.toISOString().split('T')[0];
-        });
-
-        const dailyData = last7Days.map(date => {
-          const dayClicks = clicks.filter(c => c.created_at.startsWith(date)).length;
-          const dayConvs = convs.filter(c => c.created_at.startsWith(date)).length;
-          return { date: date.split('-').slice(1).join('/'), clicks: dayClicks, conversions: dayConvs };
-        });
-        setChartData(dailyData);
-
-        if (totalClicks === 0 && !profileData.assigned_site_link && isDeviceAuthorized) {
-          setTimeout(() => setIsStrategyModalOpen(true), 1200);
-        }
-      }
+      await fetchDashboardData(user);
       setLoading(false);
+
+      // SUPABASE REALTIME (WebSockets per dati in diretta)
+      setIsLive(true);
+      const realtimeChannel = supabase.channel('dashboard-metrics')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'clicks', filter: `affiliate_id=eq.${user.id}` }, () => {
+           fetchDashboardData(user); // Aggiorna silenziosamente in background
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'conversions', filter: `partner_id=eq.${user.id}` }, () => {
+           fetchDashboardData(user);
+           showToast('💰 Nuova Transazione S2S Rilevata', 'success');
+        })
+        .subscribe();
+
+      return () => { supabase.removeChannel(realtimeChannel); setIsLive(false); };
     };
-    fetchDashboardData();
+
+    initApp();
   }, [isMounted, router]);
 
   const authorizeDevice = async () => {
     localStorage.setItem('fp_device_auth_v1', 'true');
-    await supabase.from('notifications').insert([{ user_id: user.id, title: '📱 Nuovo Dispositivo Verificato', message: `Hai autorizzato con successo l'accesso da un nuovo dispositivo. IP Rilevato: ${detectedIp}.`, type: 'success' }]);
+    await supabase.from('notifications').insert([{ user_id: user.id, title: '📱 Dispositivo Verificato', message: `Autorizzazione concessa da IP: ${detectedIp}.`, type: 'success' }]);
     setSecurityLock(false);
-    showToast("Dispositivo Autorizzato e Registrato.", "success");
-    if (stats.clicks === 0 && !profile.assigned_site_link) setTimeout(() => setIsStrategyModalOpen(true), 800);
+    showToast("Dispositivo Autorizzato.", "success");
+    if (stats.clicks === 0) setTimeout(() => setIsStrategyModalOpen(true), 800);
   };
 
   const lockAccountAndLogout = async () => {
-    await supabase.from('notifications').insert([{ user_id: user.id, title: '🚨 INTRUSIONE RESPINTA', message: `Hai negato l'accesso a un dispositivo sconosciuto (${detectedIp}). Il tuo terminale è al sicuro.`, type: 'error' }]);
+    await supabase.from('notifications').insert([{ user_id: user.id, title: '🚨 INTRUSIONE RESPINTA', message: `Accesso negato all'IP ${detectedIp}.`, type: 'error' }]);
     await supabase.auth.signOut();
     router.push('/login');
   };
@@ -175,19 +191,19 @@ export default function Dashboard() {
 
   const handleGetLink = (offer, e) => {
     if (e) e.stopPropagation();
-    if (profile?.traffic_status !== 'approved') { alert("🔒 Rilevata anomalia Compliance. Valida il traffico per lo sblocco S2S."); handleTabChange('assets'); return; }
+    if (profile?.traffic_status !== 'approved') return showToast("Anomalia Compliance. Valida il traffico.", "error");
     const trackingLink = `https://financepartner.netlify.app/api/click?offer_id=${offer.id}&subid=${user.id}`;
     navigator.clipboard.writeText(trackingLink);
-    showToast("🔗 URL Tracking Copiato in Memoria", 'success');
+    showToast("🔗 Tracker copiato in memoria", 'success');
   };
 
   const handleRequestSiteSubmit = async (e) => {
     e.preventDefault();
     setSavingSettings(true);
-    const targetName = selectedOffer ? selectedOffer.name : "Hub Multilink Globale";
+    const targetName = selectedOffer ? selectedOffer.name : "Hub Globale";
     const trackingLinkToProvide = selectedOffer ? `https://financepartner.netlify.app/api/click?offer_id=${selectedOffer.id}&subid=${user.id}` : `Hub. SubID: ${user.id}`;
     const timestamp = new Date().toLocaleString('it-IT');
-    const newBriefing = `\n\n--- [${timestamp}] ---\n🎯 ASSET: ${targetName}\n🔗 LINK S2S: ${trackingLinkToProvide}\n📱 STRATEGIA: ${siteForm.whereToPromote}\n💰 KPI: ${siteForm.goals}`;
+    const newBriefing = `\n[${timestamp}] TARGET: ${targetName} | STRATEGIA: ${siteForm.whereToPromote} | KPI: ${siteForm.goals}`;
     
     const updatedNotes = (profile.traffic_notes || '') + newBriefing;
     const newStatus = profile.traffic_status === 'approved' ? 'approved' : 'pending';
@@ -197,20 +213,15 @@ export default function Dashboard() {
     if (!error) {
       setProfile({...profile, traffic_status: newStatus, traffic_notes: updatedNotes});
       setIsSiteModalOpen(false);
-      showToast("✅ Architettura in compilazione. Briefing inviato.", 'success');
-      setSiteForm({ whereToPromote: '', goals: '' });
+      showToast("✅ Architettura in compilazione.", 'success');
     }
   };
 
   const handleSaveSettings = async () => {
     setSavingSettings(true);
-    if (billing.payment_info) {
-      const ibanRegex = /^[a-zA-Z]{2}[0-9a-zA-Z]{13,32}$/;
-      if (!ibanRegex.test(billing.payment_info.replace(/\s+/g, ''))) { showToast('Errore: Formato IBAN non riconosciuto.', 'error'); setSavingSettings(false); return; }
-    }
     const { error } = await supabase.from('profiles').update({...billing, payment_info: billing.payment_info.replace(/\s+/g, '').toUpperCase()}).eq('id', user.id);
     setSavingSettings(false);
-    if (!error) { showToast('Dati protetti e sincronizzati (AES-256).', 'success'); setProfile({...profile, ...billing}); }
+    if (!error) { showToast('Dati crittografati e sincronizzati.', 'success'); setProfile({...profile, ...billing}); }
   };
 
   const markNotificationsAsRead = async () => {
@@ -224,58 +235,36 @@ export default function Dashboard() {
     }
   };
 
-  const openSiteModal = (offer, e) => { if (e) e.stopPropagation(); setSelectedOffer(offer); setIsSiteModalOpen(true); };
-
   const StatusBadge = ({ status }) => {
-    if (status === 'approved') return <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-[0_0_15px_rgba(16,185,129,0.2)]"><span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,1)]"></span> Validato</span>;
-    if (status === 'pending') return <span className="bg-amber-500/10 border border-amber-500/30 text-amber-400 px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-[0_0_15px_rgba(245,158,11,0.2)]"><span className="w-1.5 h-1.5 bg-amber-400 rounded-full"></span> In Audit</span>;
-    if (status === 'rejected') return <span className="bg-rose-500/10 border border-rose-500/30 text-rose-400 px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-[0_0_15px_rgba(243,64,84,0.2)]"><span className="w-1.5 h-1.5 bg-rose-400 rounded-full"></span> Sospeso</span>;
-    return <span className="bg-white/5 text-slate-400 border border-white/10 px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-widest">Azione Necessaria</span>;
+    if (status === 'approved') return <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,1)]"></span> Auth</span>;
+    if (status === 'pending') return <span className="bg-amber-500/10 border border-amber-500/30 text-amber-400 px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-amber-400 rounded-full"></span> Audit</span>;
+    if (status === 'rejected') return <span className="bg-rose-500/10 border border-rose-500/30 text-rose-400 px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-rose-400 rounded-full"></span> Ban</span>;
+    return <span className="bg-white/5 text-slate-400 border border-white/10 px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-widest">Required</span>;
   };
 
   if (!isMounted) return null;
-  if (loading) return <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center gap-5"><div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin shadow-[0_0_20px_rgba(59,130,246,0.5)]"></div><p className="text-blue-500/80 text-[11px] font-mono tracking-widest uppercase animate-pulse">Establishing Secure Connection...</p></div>;
+  if (loading) return <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center"><div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>;
 
   // =======================================================================
   // 🔴 DEVICE AUTHORIZATION (IL TERMINALE ROSSO)
   // =======================================================================
   if (securityLock) {
     return (
-      <div className="min-h-screen bg-[#02040A] text-white flex items-center justify-center p-4 relative overflow-hidden selection:bg-rose-500/30">
-        
+      <div className="min-h-screen bg-[#02040A] text-white flex items-center justify-center p-4 relative overflow-hidden">
         <style dangerouslySetInnerHTML={{__html: `
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
           body { font-family: 'Inter', sans-serif; }
           .modal-animate { animation: scaleInModal 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
           @keyframes scaleInModal { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-          .btn-glow-green { position: relative; overflow: hidden; }
-          .btn-glow-green::after { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(to right, transparent, rgba(255,255,255,0.2), transparent); transform: rotate(30deg); animation: shimmer 2.5s infinite; }
-          @keyframes shimmer { 0% { transform: translateX(-100%) rotate(30deg); } 100% { transform: translateX(100%) rotate(30deg); } }
         `}} />
-
-        <div className="absolute inset-0 z-0 bg-[radial-gradient(rgba(244,63,94,0.05)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-rose-600/10 rounded-full blur-[180px] pointer-events-none animate-pulse"></div>
-
-        <div className="bg-[#0B1221] p-8 sm:p-14 rounded-[3rem] max-w-xl w-full relative z-10 border border-rose-500/30 shadow-[0_20px_80px_rgba(244,63,94,0.15)] modal-animate">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-rose-600 to-amber-500 shadow-[0_0_20px_rgba(244,63,94,0.8)]"></div>
-          
-          <div className="w-24 h-24 bg-rose-500/10 border border-rose-500/30 rounded-full flex items-center justify-center text-4xl mx-auto mb-8 shadow-[0_0_40px_rgba(244,63,94,0.3)]">
-            <span className="animate-pulse drop-shadow-md">⚠️</span>
-          </div>
-          
-          <h2 className="text-3xl font-black text-white mb-4 tracking-tight text-center">Dispositivo Sconosciuto</h2>
-          <p className="text-slate-400 text-center mb-8 leading-relaxed font-medium">
-            Per garantirti il massimo livello di sicurezza bancaria, abbiamo rilevato l'accesso da un nuovo browser o dispositivo. <br/>
-            IP Origine: <strong className="text-rose-400 font-mono bg-rose-500/10 px-2 py-1 rounded-md mt-2 inline-block border border-rose-500/20">{detectedIp}</strong>
-          </p>
-          
-          <div className="flex flex-col gap-4 pt-4 border-t border-white/5">
-            <button onClick={authorizeDevice} className="w-full btn-glow-green bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[12px] px-8 py-5 rounded-2xl active:scale-95 uppercase tracking-widest transition-all shadow-[0_10px_30px_rgba(16,185,129,0.3)]">
-              ✓ Sì, Sono Io (Autorizza e Procedi)
-            </button>
-            <button onClick={lockAccountAndLogout} className="w-full bg-transparent hover:bg-rose-500/10 border border-rose-500/30 text-rose-400 font-black text-[10px] px-8 py-5 rounded-2xl active:scale-95 uppercase tracking-widest transition-all">
-              ✕ Non Sono Io (Disconnetti)
-            </button>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-rose-600/10 rounded-full blur-[150px] animate-pulse"></div>
+        <div className="bg-[#0B1221] p-8 rounded-[2rem] max-w-lg w-full relative z-10 border border-rose-500/30 modal-animate shadow-2xl">
+          <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/30 rounded-full flex items-center justify-center text-2xl mx-auto mb-6"><span className="animate-pulse">⚠️</span></div>
+          <h2 className="text-2xl font-black text-white mb-2 text-center">Dispositivo Sconosciuto</h2>
+          <p className="text-slate-400 text-center text-sm mb-6">Accesso rilevato da un nuovo IP: <strong className="text-rose-400 font-mono block mt-1">{detectedIp}</strong></p>
+          <div className="flex flex-col gap-3 pt-4 border-t border-white/5">
+            <button onClick={authorizeDevice} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[11px] py-4 rounded-xl uppercase tracking-widest transition-all">✓ Autorizza e Procedi</button>
+            <button onClick={lockAccountAndLogout} className="w-full text-rose-400 font-black text-[10px] py-4 rounded-xl uppercase tracking-widest transition-all hover:bg-white/5">✕ Blocca Account</button>
           </div>
         </div>
       </div>
@@ -283,75 +272,39 @@ export default function Dashboard() {
   }
 
   // =======================================================================
-  // GATEKEEPER: SALA D'ATTESA VIP
+  // GATEKEEPER: COMPLIANCE
   // =======================================================================
   if (profile && profile.traffic_status !== 'approved') {
     return (
-      <div className="min-h-screen bg-[#020617] text-white flex items-center justify-center p-4 relative overflow-hidden selection:bg-blue-500/30">
+      <div className="min-h-screen bg-[#020617] text-white flex items-center justify-center p-4 relative overflow-hidden">
         <style dangerouslySetInnerHTML={{__html: `
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
           body { font-family: 'Inter', sans-serif; }
-          .gate-glass { background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(50px); -webkit-backdrop-filter: blur(50px); border: 1px solid rgba(255, 255, 255, 0.05); box-shadow: 0 40px 100px rgba(0,0,0,0.9); animation: fadeUpGate 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-          @keyframes fadeUpGate { from { opacity: 0; transform: translateY(40px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
-          @keyframes radar { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-          .radar-sweep { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 0deg, transparent 70%, rgba(59, 130, 246, 0.5) 100%); animation: radar 2.5s linear infinite; }
-          .bg-grid { background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px); background-size: 40px 40px; }
-          .input-gate { background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.08); color: white; padding: 20px; border-radius: 16px; width: 100%; outline: none; transition: all 0.3s ease; font-size: 0.95rem; font-weight: 500; }
-          .input-gate:focus { border-color: #3B82F6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); background: rgba(0,0,0,0.7); }
-          .btn-glow { position: relative; overflow: hidden; }
-          .btn-glow::after { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(to right, transparent, rgba(255,255,255,0.2), transparent); transform: rotate(30deg); animation: shimmer 3s infinite; }
-          @keyframes shimmer { 0% { transform: translateX(-100%) rotate(30deg); } 100% { transform: translateX(100%) rotate(30deg); } }
+          .gate-glass { background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(50px); border: 1px solid rgba(255, 255, 255, 0.05); }
+          .input-gate { background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.08); color: white; padding: 18px; border-radius: 12px; width: 100%; outline: none; font-size: 0.9rem; }
+          .input-gate:focus { border-color: #3B82F6; }
         `}} />
-
-        <div className="absolute inset-0 z-0 bg-grid opacity-50 pointer-events-none"></div>
-        <div className="absolute top-[-20%] right-[-10%] w-[800px] h-[800px] bg-blue-600/10 rounded-full blur-[150px] pointer-events-none"></div>
-        
-        <button onClick={handleLogout} className="absolute top-8 right-8 z-50 text-[10px] font-black text-slate-500 uppercase tracking-widest hover:text-white transition-colors bg-white/5 hover:bg-white/10 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-md">Log Out</button>
+        <button onClick={handleLogout} className="absolute top-6 right-6 z-50 text-[10px] font-black text-slate-500 uppercase tracking-widest hover:text-white transition-colors bg-white/5 px-4 py-2 rounded-full border border-white/10">Log Out</button>
 
         {(!profile.traffic_status || profile.traffic_status === 'none') && (
-          <div className="gate-glass p-8 sm:p-14 rounded-[2.5rem] max-w-xl w-full relative z-10 overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 via-indigo-500 to-emerald-400"></div>
-            <div className="w-16 h-16 bg-blue-500/10 border border-blue-500/30 rounded-2xl flex items-center justify-center mb-8 shadow-[0_0_30px_rgba(59,130,246,0.2)]">
-              <span className="text-2xl drop-shadow-md">🔐</span>
-            </div>
-            <h2 className="text-4xl font-black text-white mb-4 tracking-tight">Accesso Privato</h2>
-            <p className="text-base text-slate-400 mb-10 leading-relaxed font-medium">B2B Network ad alto rendimento. Per garantire la qualità dei lead ai nostri istituti partner, operiamo solo su invito o candidatura verificata.</p>
-            
-            <form onSubmit={submitApplication} className="space-y-6">
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">URL Operativo (Sito o Social)</label>
-                <input type="text" value={gateForm.url} onChange={e => setGateForm({...gateForm, url: e.target.value})} className="input-gate font-mono text-blue-200" placeholder="https:// (Opzionale se richiedi un Hub)" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Strategia & Volumi Stimati</label>
-                <textarea required rows="3" value={gateForm.strategy} onChange={e => setGateForm({...gateForm, strategy: e.target.value})} className="input-gate resize-none" placeholder="Descrivi brevemente come genererai traffico..."></textarea>
-              </div>
-              <div className="pt-4">
-                <button type="submit" disabled={isSubmittingGate} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black text-[12px] px-8 py-5 rounded-2xl shadow-[0_10px_40px_rgba(59,130,246,0.4)] active:scale-95 uppercase tracking-widest transition-all disabled:opacity-50 btn-glow">
-                  {isSubmittingGate ? 'Crittografia...' : 'Sottoponi a Dipartimento Compliance'}
-                </button>
-              </div>
+          <div className="gate-glass p-8 sm:p-12 rounded-[2rem] max-w-lg w-full relative z-10 border-t-2 border-t-blue-500 shadow-2xl">
+            <div className="w-14 h-14 bg-blue-500/10 border border-blue-500/30 rounded-2xl flex items-center justify-center mb-6"><span className="text-xl">🔐</span></div>
+            <h2 className="text-3xl font-black text-white mb-2">Accesso Privato</h2>
+            <p className="text-sm text-slate-400 mb-8 leading-relaxed">B2B Network ad alto rendimento. L'operatività è soggetta ad approvazione manuale.</p>
+            <form onSubmit={submitApplication} className="space-y-5">
+              <div><label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Sorgente (Social o Web)</label><input type="text" value={gateForm.url} onChange={e => setGateForm({...gateForm, url: e.target.value})} className="input-gate font-mono text-blue-200" placeholder="https://" /></div>
+              <div><label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Strategia Operativa</label><textarea required rows="2" value={gateForm.strategy} onChange={e => setGateForm({...gateForm, strategy: e.target.value})} className="input-gate resize-none" placeholder="Descrivi il traffico..."></textarea></div>
+              <div className="pt-2"><button type="submit" disabled={isSubmittingGate} className="w-full bg-blue-600 text-white font-black text-[11px] py-4 rounded-xl active:scale-95 uppercase tracking-widest disabled:opacity-50">{isSubmittingGate ? 'Invio...' : 'Sottoponi a Compliance'}</button></div>
             </form>
           </div>
         )}
 
         {profile.traffic_status === 'pending' && (
-          <div className="gate-glass p-10 sm:p-20 rounded-[3rem] max-w-lg w-full relative z-10 text-center flex flex-col items-center">
-            <div className="relative w-36 h-36 flex items-center justify-center mb-12">
-              <div className="absolute inset-0 border border-blue-500/30 rounded-full"></div>
-              <div className="absolute inset-3 border border-blue-500/10 rounded-full"></div>
-              <div className="absolute inset-0 rounded-full radar-sweep"></div>
-              <div className="absolute w-28 h-28 bg-[#020617] rounded-full z-10 flex items-center justify-center shadow-[inset_0_0_20px_rgba(0,0,0,1)] border border-white/5"><span className="text-4xl">⏳</span></div>
-            </div>
-            <div className="inline-flex items-center gap-3 px-5 py-2 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] font-black uppercase tracking-widest mb-8 shadow-[0_0_20px_rgba(245,158,11,0.2)]"><span className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse"></span> Sistema in Audit</div>
-            <h2 className="text-4xl font-black text-white mb-5 tracking-tight">Verifica in Corso</h2>
-            <p className="text-base text-slate-400 leading-relaxed mb-10">Stiamo analizzando la tua impronta digitale e i dati inseriti. Lo sblocco del terminale richiede solitamente 12-24h.</p>
-            <div className="w-full bg-black/40 border border-white/5 rounded-3xl p-8 text-left space-y-5">
-              <div className="flex items-center gap-4 text-sm font-bold text-slate-300"><span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px]">✓</span> Handshake API</div>
-              <div className="flex items-center gap-4 text-sm font-bold text-slate-300"><span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px]">✓</span> Identity Hash</div>
-              <div className="flex items-center gap-4 text-sm font-bold text-white"><span className="w-6 h-6 rounded-full border-2 border-blue-500 border-t-transparent animate-spin flex items-center justify-center text-[10px]"></span> Quality Check Umano</div>
-            </div>
-            <p className="mt-10 text-[10px] text-slate-500 font-mono tracking-widest uppercase">Trace ID: {user.id.substring(0,12)}</p>
+          <div className="gate-glass p-10 rounded-[2rem] max-w-md w-full relative z-10 text-center border-t-2 border-t-amber-500">
+            <div className="w-16 h-16 rounded-full border-2 border-amber-500/30 border-t-amber-500 animate-spin mx-auto mb-6"></div>
+            <h2 className="text-2xl font-black text-white mb-2">Verifica in Corso</h2>
+            <p className="text-sm text-slate-400 mb-6">Analisi impronta digitale. Richiede solitamente 12-24h.</p>
+            <p className="text-[10px] text-slate-500 font-mono tracking-widest uppercase">Trace ID: {user.id.substring(0,12)}</p>
           </div>
         )}
       </div>
@@ -359,113 +312,82 @@ export default function Dashboard() {
   }
 
   // =======================================================================
-  // GRAFICO ANALYTICS (God-Tier UI)
+  // CHART COMPONENT DENSE
   // =======================================================================
   const maxClicks = Math.max(...chartData.map(d => d.clicks), 1);
   const ChartComponent = () => (
-    <div className="card-glass p-6 sm:p-10 relative overflow-hidden mt-6 stagger-3">
-      <div className="flex justify-between items-center mb-8 pb-4">
-        <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-3">
-          <span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]"></span> Volume Generato (7G)
+    <div className="card-glass p-6 sm:p-8 relative overflow-hidden mt-6 stagger-3">
+      <div className="flex justify-between items-center mb-6 border-b border-white/5 pb-4">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+          {isLive ? <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span> : <span className="w-1.5 h-1.5 rounded-full bg-slate-500"></span>}
+          Volume Traffico (7G)
         </h3>
+        <span className="text-[9px] font-mono text-slate-500">{stats.clicks} EVENTI TOTALI</span>
       </div>
-      <div className="h-48 flex items-end gap-2 sm:gap-6 pt-4 pb-2 relative w-full">
+      <div className="h-40 flex items-end gap-2 sm:gap-4 pt-2 relative w-full">
         <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-10 z-0">
-          <div className="w-full h-px bg-slate-400"></div><div className="w-full h-px bg-slate-400"></div><div className="w-full h-px bg-slate-400"></div><div className="w-full h-px bg-slate-400"></div>
+          <div className="w-full h-px bg-slate-400"></div><div className="w-full h-px bg-slate-400"></div><div className="w-full h-px bg-slate-400"></div>
         </div>
         {chartData.map((data, i) => (
-          <div key={i} className="flex-1 flex flex-col items-center gap-3 relative group z-10 h-full justify-end cursor-pointer">
-            <div className="absolute -top-12 opacity-0 group-hover:opacity-100 transition-all duration-300 transform group-hover:-translate-y-2 bg-[#020617] border border-white/10 px-4 py-2 rounded-xl text-[10px] font-mono z-20 whitespace-nowrap shadow-[0_15px_30px_rgba(0,0,0,0.8)] pointer-events-none flex items-center gap-3">
-              <span className="text-blue-400 font-bold">{data.clicks} Clicks</span> <span className="w-px h-3 bg-white/10"></span> <span className="text-emerald-400 font-bold">{data.conversions} Lead</span>
+          <div key={i} className="flex-1 flex flex-col items-center gap-2 relative group z-10 h-full justify-end cursor-pointer">
+            <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all bg-[#020617] border border-white/10 px-3 py-1.5 rounded-lg text-[9px] font-mono z-20 whitespace-nowrap shadow-xl flex items-center gap-2">
+              <span className="text-blue-400">{data.clicks} Click</span> <span className="w-px h-2 bg-white/10"></span> <span className="text-emerald-400">{data.conversions} Lead</span>
             </div>
-            <div className="w-full sm:w-[60%] relative flex justify-center items-end h-full">
-              <div className="w-full bg-gradient-to-t from-blue-600/10 to-blue-500/30 group-hover:to-blue-400/50 rounded-t-lg transition-all duration-500 relative overflow-hidden animate-[growUp_1s_ease-out_forwards]" style={{height: `${(data.clicks / maxClicks) * 100}%`, minHeight: '6px', transformOrigin: 'bottom'}}>
-                <div className="absolute bottom-0 w-full bg-blue-500 rounded-full" style={{height: '3px', boxShadow: '0 0 10px rgba(59,130,246,1)'}}></div>
-                <div className="absolute top-0 w-full h-1 bg-white/20"></div>
+            <div className="w-full sm:w-[50%] relative flex justify-center items-end h-full">
+              <div className="w-full bg-blue-500/20 group-hover:bg-blue-500/40 rounded-t-sm transition-all duration-500 relative overflow-hidden" style={{height: `${(data.clicks / maxClicks) * 100}%`, minHeight: '4px'}}>
+                <div className="absolute bottom-0 w-full bg-blue-500" style={{height: '2px'}}></div>
               </div>
             </div>
-            <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{data.date.split('/')[0]}</span>
+            <span className="text-[8px] font-bold text-slate-600 uppercase">{data.date.split('/')[0]}</span>
           </div>
         ))}
       </div>
     </div>
   );
 
-  // =======================================================================
-  // CSS ENGINE & DASHBOARD MAIN
-  // =======================================================================
   return (
     <div className="min-h-screen bg-[#020617] text-slate-300 font-sans flex flex-col md:flex-row relative overflow-hidden selection:bg-blue-500/30">
       
       <style dangerouslySetInnerHTML={{__html: `
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         body { font-family: 'Inter', sans-serif; }
-        
-        @keyframes slideUpFade { from { opacity: 0; transform: translateY(40px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes growUp { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-        @keyframes shimmerBtn { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
-        @keyframes scaleInModal { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-
-        .stagger-1 { animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards; opacity: 0; }
-        .stagger-2 { animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.15s forwards; opacity: 0; }
-        .stagger-3 { animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.25s forwards; opacity: 0; }
-        .stagger-4 { animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.35s forwards; opacity: 0; }
-        
-        .modal-animate { animation: scaleInModal 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-
-        .card-glass { background: rgba(15, 23, 42, 0.3); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); border: 1px solid rgba(255, 255, 255, 0.03); border-radius: 1.5rem; transition: all 0.3s ease; }
-        .card-glass-hover:hover { border-color: rgba(255, 255, 255, 0.08); box-shadow: 0 30px 60px -15px rgba(0,0,0,0.8); transform: translateY(-4px); background: rgba(15, 23, 42, 0.5); }
-        
-        .input-premium { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.05); color: white; padding: 18px 22px; border-radius: 1rem; width: 100%; outline: none; transition: all 0.3s ease; font-size: 0.95rem; font-weight: 500; }
-        .input-premium:focus { border-color: #3B82F6; background: rgba(0, 0, 0, 0.6); box-shadow: inset 0 0 0 1px #3B82F6, 0 0 20px rgba(59,130,246,0.15); }
-        
+        @keyframes slideUpFade { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .stagger-1 { animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.05s forwards; opacity: 0; }
+        .stagger-2 { animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards; opacity: 0; }
+        .stagger-3 { animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.15s forwards; opacity: 0; }
+        .stagger-4 { animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards; opacity: 0; }
+        .modal-animate { animation: slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .card-glass { background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.03); border-radius: 1.2rem; }
+        .input-premium { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.05); color: white; padding: 16px 20px; border-radius: 1rem; width: 100%; outline: none; font-size: 0.9rem; }
+        .input-premium:focus { border-color: #3B82F6; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .text-gradient { background: linear-gradient(135deg, #ffffff 0%, #94a3b8 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        
-        .btn-shimmer { position: relative; overflow: hidden; background-size: 200% auto; transition: all 0.3s ease; background-image: linear-gradient(90deg, rgba(37,99,235,1) 0%, rgba(96,165,250,0.8) 50%, rgba(37,99,235,1) 100%); }
-        .btn-shimmer:hover { animation: shimmerBtn 2s linear infinite; transform: translateY(-2px); box-shadow: 0 10px 30px -10px rgba(59,130,246,0.8); }
-
-        .tab-btn { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px 20px; border-radius: 1rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 800; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); border: 1px solid transparent; }
-        .tab-btn.active { background: rgba(59, 130, 246, 0.1); color: #60A5FA; border-color: rgba(59, 130, 246, 0.2); box-shadow: inset 0 0 20px rgba(59,130,246,0.05); }
-        .tab-btn:not(.active):hover { background: rgba(255, 255, 255, 0.02); color: white; transform: translateX(6px); }
-
-        .mobile-nav-glass { background: rgba(2, 6, 23, 0.75); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); border-top: 1px solid rgba(255, 255, 255, 0.05); }
+        .tab-btn { display: flex; align-items: center; gap: 12px; width: 100%; padding: 14px 18px; border-radius: 0.8rem; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 800; transition: all 0.2s ease; border: 1px solid transparent; }
+        .tab-btn.active { background: rgba(59, 130, 246, 0.1); color: #60A5FA; border-color: rgba(59, 130, 246, 0.2); }
+        .tab-btn:not(.active):hover { background: rgba(255, 255, 255, 0.02); color: white; }
       `}} />
 
-      {/* Sfondo Ambience */}
-      <div className="fixed inset-0 z-0 bg-[radial-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:40px_40px] opacity-60 pointer-events-none"></div>
-      <div className="fixed top-[-10%] left-[-10%] w-[60%] h-[60%] rounded-full bg-blue-600/10 blur-[180px] pointer-events-none"></div>
-      <div className="fixed bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-900/10 blur-[150px] pointer-events-none"></div>
+      <div className="fixed inset-0 z-0 bg-[radial-gradient(rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
 
       {/* TOAST */}
       {settingsMsg.text && (
-        <div className={`fixed top-8 left-1/2 -translate-x-1/2 z-[110] px-6 py-4 rounded-full text-[10px] font-black uppercase tracking-widest shadow-[0_20px_50px_rgba(0,0,0,0.8)] modal-animate border backdrop-blur-2xl ${settingsMsg.type === 'error' ? 'bg-rose-950/90 text-rose-200 border-rose-500/50' : 'bg-[#0B1221]/90 text-blue-200 border-blue-500/50'}`}>
-          <div className="flex items-center gap-3">
-            <span className={`w-2.5 h-2.5 rounded-full ${settingsMsg.type === 'error' ? 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.8)]' : 'bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.8)]'} animate-pulse`}></span>
-            {settingsMsg.text}
-          </div>
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[110] px-5 py-3 rounded-full text-[9px] font-black uppercase tracking-widest shadow-2xl modal-animate border backdrop-blur-xl ${settingsMsg.type === 'error' ? 'bg-rose-950/90 text-rose-200 border-rose-500/50' : 'bg-[#0B1221]/90 text-blue-300 border-blue-500/50'}`}>
+          {settingsMsg.text}
         </div>
       )}
 
-      {/* MODALE NOTIFICHE (FIX MOBILE & DESKTOP) */}
+      {/* OVERLAY NOTIFICHE MOBILE/DESKTOP */}
       {showNotifications && (
         <>
-          {/* Overlay scuro solo su mobile per bloccare click fuori e risaltare il popup */}
           <div className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[90]" onClick={() => setShowNotifications(false)}></div>
-          
-          <div className="fixed top-20 left-4 right-4 md:absolute md:top-24 md:left-auto md:right-10 z-[100] md:w-[420px] card-glass p-1 shadow-[0_40px_80px_rgba(0,0,0,0.9)] rounded-[2rem] overflow-hidden modal-animate border border-white/10 flex flex-col max-h-[75vh]">
-            <div className="p-5 bg-white/5 border-b border-white/5 font-black text-white uppercase tracking-widest text-[10px] flex justify-between items-center rounded-t-[1.8rem] shrink-0">
-              <span className="flex items-center gap-2"><span className="text-sm">🔔</span> System Log</span>
-              <button onClick={() => setShowNotifications(false)} className="text-slate-400 hover:text-white bg-white/5 w-8 h-8 rounded-full flex items-center justify-center transition-colors">✕</button>
+          <div className="fixed top-20 left-4 right-4 md:absolute md:top-24 md:left-auto md:right-10 z-[100] md:w-[380px] bg-[#0B1221] shadow-2xl rounded-3xl overflow-hidden modal-animate border border-white/10 flex flex-col max-h-[70vh]">
+            <div className="p-4 bg-white/5 border-b border-white/5 font-black text-white uppercase tracking-widest text-[9px] flex justify-between items-center shrink-0">
+              <span>System Log</span><button onClick={() => setShowNotifications(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
-            <div className="overflow-y-auto p-3 hide-scrollbar flex-1">
-              {notifications.length === 0 ? (
-                <p className="p-10 text-[11px] text-slate-500 text-center uppercase tracking-widest font-black">Nessun evento registrato</p>
-              ) : notifications.map(n => (
-                <div key={n.id} className={`p-5 mb-3 rounded-2xl text-sm transition-all ${n.is_read ? 'bg-white/[0.02] border border-white/[0.02]' : 'bg-gradient-to-br from-blue-600/10 to-transparent border border-blue-500/20 shadow-lg'}`}>
-                  <h4 className="font-black text-white mb-2 text-[12px]">{n.title}</h4>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">{n.message}</p>
-                  <p className="text-[9px] text-blue-400 mt-3 font-mono">{new Date(n.created_at).toLocaleString()}</p>
+            <div className="overflow-y-auto p-2 hide-scrollbar flex-1">
+              {notifications.length === 0 ? (<p className="p-8 text-[10px] text-slate-500 text-center font-bold">Vuoto</p>) : notifications.map(n => (
+                <div key={n.id} className={`p-4 mb-2 rounded-2xl text-sm ${n.is_read ? 'bg-white/[0.02]' : 'bg-blue-600/10 border border-blue-500/20'}`}>
+                  <h4 className="font-black text-white mb-1 text-[11px]">{n.title}</h4>
+                  <p className="text-[10px] text-slate-400">{n.message}</p>
                 </div>
               ))}
             </div>
@@ -474,148 +396,115 @@ export default function Dashboard() {
       )}
 
       {/* HEADER MOBILE */}
-      <header className="md:hidden flex items-center justify-between p-5 border-b border-white/5 bg-[#020617]/90 backdrop-blur-2xl z-40 relative">
-        <div className="flex items-center gap-3">
-           <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center font-black text-white text-base shadow-[0_0_20px_rgba(59,130,246,0.4)]">F</div>
-           <span className="font-black text-white text-xl tracking-tight">Finance<span className="text-blue-500">Partner</span></span>
+      <header className="md:hidden flex items-center justify-between p-4 border-b border-white/5 bg-[#020617] z-40 relative">
+        <div className="flex items-center gap-2">
+           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-black text-white text-sm">F</div>
+           <span className="font-black text-white text-lg">FinancePartner</span>
         </div>
-        <button onClick={markNotificationsAsRead} className="relative text-2xl text-slate-400 hover:text-white transition-colors">
-          🔔 {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-blue-500 rounded-full border-2 border-[#020617] animate-pulse"></span>}
+        <button onClick={markNotificationsAsRead} className="relative text-xl text-slate-400">
+          🔔 {unreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-blue-500 rounded-full border-2 border-[#020617]"></span>}
         </button>
       </header>
 
       {/* SIDEBAR DESKTOP */}
-      <aside className="hidden md:flex flex-col w-72 lg:w-80 h-screen border-r border-white/5 bg-[#020617]/40 backdrop-blur-3xl p-6 lg:p-8 relative z-40 shrink-0">
-        <div className="flex items-center gap-4 lg:gap-5 mb-10 mt-2">
-          <div className="w-12 h-12 lg:w-14 lg:h-14 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-[1.2rem] flex items-center justify-center font-black text-white text-xl lg:text-2xl shadow-[0_0_30px_rgba(59,130,246,0.4)]">F</div>
+      <aside className="hidden md:flex flex-col w-64 h-screen border-r border-white/5 bg-[#020617] p-6 relative z-40 shrink-0">
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-black text-white text-lg">F</div>
           <div>
-            <span className="font-black text-white text-xl lg:text-2xl tracking-tight block leading-none">FinancePartner</span>
-            <span className="text-[9px] lg:text-[10px] font-black text-blue-500 uppercase tracking-widest mt-1.5 block">Private Network</span>
-          </div>
-        </div>
-
-        <div className="mb-10 p-5 bg-white/[0.02] border border-white/5 rounded-2xl flex items-center gap-5 relative overflow-hidden group hover:border-emerald-500/20 transition-colors">
-          <div className="absolute inset-0 bg-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.15)] relative z-10">🛡️</div>
-          <div className="relative z-10">
-            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Status Utenza</p>
-            <p className="text-xs font-black mt-1 text-emerald-400 drop-shadow-md">Network Autorizzato</p>
+            <span className="font-black text-white text-lg block leading-none">FinancePartner</span>
+            <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest mt-1">B2B Terminal</span>
           </div>
         </div>
         
-        <nav className="space-y-2 flex-1">
-          {[ 
-            {id: 'overview', icon: '📊', label: 'Terminale'}, 
-            {id: 'marketplace', icon: '🏦', label: 'Marketplace'}, 
-            {id: 'assets', icon: '🖥️', label: 'Infrastrutture'}, 
-            {id: 'kyc', icon: '🛡️', label: 'Compliance'} 
-          ].map(tab => (
+        <nav className="space-y-1 flex-1">
+          {[ {id: 'overview', icon: '📊', label: 'Terminale'}, {id: 'marketplace', icon: '🏦', label: 'Offerte'}, {id: 'assets', icon: '🖥️', label: 'Infrastruttura'}, {id: 'kyc', icon: '🛡️', label: 'Dati & KYC'} ].map(tab => (
             <button key={tab.id} onClick={() => handleTabChange(tab.id)} className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}>
-              <span className="text-xl opacity-80">{tab.icon}</span> <span>{tab.label}</span>
-              {(tab.id === 'assets' || tab.id === 'kyc') && profile?.[tab.id + '_status'] === 'pending' && <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.8)] animate-pulse ml-auto"></span>}
+              <span className="text-lg opacity-80">{tab.icon}</span> <span>{tab.label}</span>
+              {(tab.id === 'assets' || tab.id === 'kyc') && profile?.[tab.id + '_status'] === 'pending' && <span className="w-2 h-2 rounded-full bg-amber-500 ml-auto"></span>}
             </button>
           ))}
         </nav>
         
-        <div className="mt-auto p-6 bg-white/[0.02] rounded-3xl border border-white/5 mb-5 text-center relative overflow-hidden">
-          <div className="absolute inset-0 bg-blue-500/5"></div>
-          <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 relative z-10">Account Manager</p>
-          <a href="mailto:finance.partnerr@gmail.com" className="text-[11px] font-bold text-slate-300 hover:text-blue-400 transition-colors relative z-10 break-all">finance.partnerr@gmail.com</a>
+        <div className="mt-auto border-t border-white/5 pt-4 space-y-3">
+          <Link href="/terms" className="text-[9px] font-bold text-slate-500 hover:text-white uppercase tracking-widest block text-center">Termini e Condizioni</Link>
+          <button onClick={handleLogout} className="text-[9px] font-bold text-rose-500/70 hover:text-rose-400 uppercase tracking-widest w-full text-center bg-white/[0.02] py-3 rounded-xl">Disconnetti</button>
         </div>
-        <button onClick={handleLogout} className="text-[10px] font-black text-slate-500 hover:text-rose-400 py-4 uppercase tracking-widest transition-colors w-full text-center flex items-center justify-center gap-2 bg-white/[0.01] hover:bg-rose-500/10 rounded-2xl"><span>⏻</span> Termina Sessione</button>
       </aside>
 
-      {/* MAIN CONTENT VIVENTE */}
-      <main className="flex-1 h-screen overflow-y-auto p-4 sm:p-8 lg:p-14 pb-36 relative z-10 hide-scrollbar scroll-smooth">
-        <div key={animKey} className="max-w-6xl mx-auto">
+      {/* MAIN CONTENT */}
+      <main className="flex-1 h-screen overflow-y-auto p-4 sm:p-8 lg:p-10 pb-32 relative z-10 hide-scrollbar bg-[#020617]">
+        <div key={animKey} className="max-w-5xl mx-auto">
 
           {/* TAB 1: OVERVIEW */}
           {activeTab === 'overview' && (
-            <div className="space-y-8 lg:space-y-10">
+            <div className="space-y-6">
               
-              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 pb-6 border-b border-white/5 stagger-1">
+              <div className="flex justify-between items-end pb-4 border-b border-white/5 stagger-1">
                 <div>
-                  <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight text-gradient leading-[1.1] mb-2">Console Operativa</h1>
-                  <p className="text-xs sm:text-sm text-slate-400 font-mono flex items-center gap-2">
-                    <span className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.8)]"></span> API Connection: Secure
+                  <h1 className="text-3xl font-black text-white tracking-tight mb-1">Terminale</h1>
+                  <p className="text-[10px] text-slate-500 font-mono flex items-center gap-1.5">
+                    {isLive ? <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> : <span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span>}
+                    {isLive ? 'S2S CONNECTION: LIVE' : 'CONNECTING...'}
                   </p>
                 </div>
-                <div className="flex items-center gap-4">
-                  <button onClick={() => setIsStrategyModalOpen(true)} className="flex items-center gap-2.5 bg-white/[0.03] hover:bg-white/[0.08] border border-white/10 text-white px-6 py-4 rounded-[1.2rem] font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg hover:-translate-y-1">
-                    <span className="text-lg">🧠</span> Playbook
-                  </button>
-                  {/* Campanella Desktop */}
-                  <button onClick={markNotificationsAsRead} className="hidden md:flex relative w-14 h-14 bg-white/[0.03] hover:bg-white/[0.08] rounded-[1.2rem] items-center justify-center text-2xl transition-all border border-white/10 text-white shadow-lg hover:-translate-y-1">
-                    🔔 {unreadCount > 0 && <span className="absolute -top-2 -right-2 w-6 h-6 bg-blue-600 text-white text-[11px] font-black rounded-full flex items-center justify-center shadow-[0_0_15px_rgba(37,99,235,0.8)] animate-bounce border-2 border-[#020617]">{unreadCount}</span>}
+                <div className="flex gap-2">
+                  <button onClick={() => setIsStrategyModalOpen(true)} className="bg-white/[0.05] hover:bg-white/10 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">Playbook</button>
+                  <button onClick={markNotificationsAsRead} className="hidden md:flex relative w-10 h-10 bg-white/[0.05] hover:bg-white/10 rounded-xl items-center justify-center text-lg transition-all text-white">
+                    🔔 {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-blue-600 rounded-full border-2 border-[#020617]"></span>}
                   </button>
                 </div>
               </div>
 
-              {/* Asset Multi-Link Terminal */}
               {profile?.assigned_site_link && (
-                <div className="card-glass p-8 sm:p-12 rounded-[2.5rem] border-l-4 border-l-blue-500 relative overflow-hidden group stagger-2">
-                  <div className="absolute top-0 left-0 w-[500px] h-full bg-gradient-to-r from-blue-500/10 to-transparent pointer-events-none group-hover:from-blue-500/20 transition-all duration-500"></div>
-                  <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-                    <div className="flex-1">
-                      <h3 className="text-2xl sm:text-3xl font-black mb-3 tracking-tight text-white flex items-center gap-3">🚀 I tuoi Asset Operativi</h3>
-                      <p className="text-sm text-blue-100/60 leading-relaxed max-w-2xl font-medium">L'infrastruttura è attiva. Incolla questi link nelle tue campagne per abilitare il Postback Server-to-Server diretto con l'istituto.</p>
+                <div className="card-glass p-6 border-l-4 border-l-blue-500 flex flex-col md:flex-row justify-between gap-6 stagger-2">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-black text-white mb-1">🚀 Asset Operativi</h3>
+                    <p className="text-[11px] text-slate-400">Hub compilato. Incolla questi URL nelle campagne.</p>
+                  </div>
+                  <div className="w-full md:w-[400px] bg-black/50 border border-white/10 rounded-xl p-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-[8px] font-black text-slate-500 uppercase">Endpoint</span>
+                      <button onClick={() => {navigator.clipboard.writeText(profile.assigned_site_link); showToast("Copiato", 'success');}} className="text-[9px] text-blue-400 font-black uppercase hover:text-blue-300">Copia</button>
                     </div>
-                    <div className="w-full lg:w-[450px] bg-black/60 border border-blue-500/30 rounded-[1.5rem] p-6 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)] relative group/copy transition-all hover:border-blue-400">
-                      <div className="flex justify-between items-center mb-4">
-                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest font-mono">Terminal Links</span>
-                        <button onClick={() => {navigator.clipboard.writeText(profile.assigned_site_link); showToast("🔗 Asset copiati negli appunti", 'success');}} className="text-[10px] bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white px-4 py-2 rounded-lg font-black uppercase tracking-widest transition-all">Copia Tutto</button>
-                      </div>
-                      <textarea readOnly value={profile.assigned_site_link} className="bg-transparent text-blue-300 font-mono text-sm w-full outline-none resize-none hide-scrollbar leading-relaxed" rows={Math.min(profile.assigned_site_link.split('\n').length, 5)} />
-                    </div>
+                    <textarea readOnly value={profile.assigned_site_link} className="bg-transparent text-blue-300 font-mono text-[11px] w-full outline-none resize-none hide-scrollbar" rows={2} />
                   </div>
                 </div>
               )}
 
-              {/* Metriche Premium */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-8 stagger-2">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-2">
                 {[
-                  { label: "Liquidità Esigibile", value: `€${profile?.wallet_approved?.toFixed(2) || '0.00'}`, color: "text-white", glow: "hover:shadow-[0_10px_30px_rgba(255,255,255,0.1)] hover:border-white/20" },
-                  { label: "Volume in Valutazione", value: `€${profile?.wallet_pending?.toFixed(2) || '0.00'}`, color: "text-amber-400", glow: "hover:shadow-[0_10px_30px_rgba(245,158,11,0.15)] hover:border-amber-500/30" },
-                  { label: "Tasso Conversione", value: `${stats.cr.toFixed(2)}%`, color: "text-blue-400", glow: "hover:shadow-[0_10px_30px_rgba(59,130,246,0.15)] hover:border-blue-500/30" },
-                  { label: "Earnings Per Click", value: `€${stats.epc.toFixed(2)}`, color: "text-emerald-400", glow: "hover:shadow-[0_10px_30px_rgba(16,185,129,0.15)] hover:border-emerald-500/30" }
+                  { label: "Esigibile", value: `€${profile?.wallet_approved?.toFixed(2) || '0.00'}`, color: "text-white" },
+                  { label: "In Valutazione", value: `€${profile?.wallet_pending?.toFixed(2) || '0.00'}`, color: "text-amber-400" },
+                  { label: "Conversion Rate", value: `${stats.cr.toFixed(2)}%`, color: "text-blue-400" },
+                  { label: "EPC", value: `€${stats.epc.toFixed(2)}`, color: "text-emerald-400" }
                 ].map((stat, i) => (
-                  <div key={i} className={`card-glass p-8 flex flex-col justify-between min-h-[160px] transition-all duration-300 transform hover:-translate-y-1 ${stat.glow}`}>
-                    <span className="text-[10px] sm:text-[11px] font-black text-slate-500 uppercase tracking-widest">{stat.label}</span>
-                    <p className={`text-4xl sm:text-5xl font-black ${stat.color} tracking-tight mt-5 drop-shadow-lg`}>{stat.value}</p>
+                  <div key={i} className="card-glass p-5 flex flex-col justify-between h-[100px]">
+                    <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{stat.label}</span>
+                    <p className={`text-2xl font-black ${stat.color} font-mono tracking-tight`}>{stat.value}</p>
                   </div>
                 ))}
               </div>
 
               <ChartComponent />
 
-              {/* Feed S2S */}
-              <div className="card-glass p-8 sm:p-12 relative overflow-hidden stagger-4">
-                  <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-5 mb-10 border-b border-white/5 pb-8">
-                    <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-widest">Log Transazioni S2S</h3>
-                    <div className="px-5 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-3 w-max shadow-[0_0_20px_rgba(16,185,129,0.1)]">
-                      <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,1)]"></span>
-                      <span className="text-[10px] uppercase font-black text-emerald-400 tracking-widest">Ricezione Dati Attiva</span>
-                    </div>
+              <div className="card-glass p-6 sm:p-8 mt-6 stagger-4">
+                  <div className="flex justify-between items-center mb-6 border-b border-white/5 pb-4">
+                    <h3 className="text-[11px] font-black text-white uppercase tracking-widest">Postback Log (S2S)</h3>
                   </div>
-                  <div className="space-y-4">
-                    {conversions.slice(0, 6).map((conv, i) => (
-                      <div key={conv.id} className="flex justify-between items-center p-6 rounded-[1.5rem] bg-white/[0.01] border border-white/[0.03] hover:bg-white/[0.04] transition-all hover:scale-[1.01]" style={{animation: `slideUpFade 0.4s ease-out ${0.4 + (i*0.1)}s forwards`, opacity: 0}}>
+                  <div className="space-y-2">
+                    {conversions.slice(0, 5).map((conv) => (
+                      <div key={conv.id} className="flex justify-between items-center p-4 rounded-xl bg-white/[0.02]">
                         <div>
-                          <p className="text-base sm:text-lg font-black text-white tracking-tight mb-1.5">{conv.program_id || 'Lead Finanziario'}</p>
-                          <p className="text-[11px] font-mono text-slate-500">{new Date(conv.created_at).toLocaleString()}</p>
+                          <p className="text-sm font-black text-white mb-0.5">{conv.program_id}</p>
+                          <p className="text-[9px] font-mono text-slate-500">{new Date(conv.created_at).toLocaleString()}</p>
                         </div>
                         <div className="text-right">
-                          <p className={`text-2xl sm:text-3xl font-black font-mono tracking-tight drop-shadow-md mb-1.5 ${conv.status === 'approved' ? 'text-emerald-400' : conv.status === 'rejected' ? 'text-rose-500' : 'text-amber-400'}`}>+€{conv.amount?.toFixed(2)}</p>
-                          <p className={`text-[10px] uppercase tracking-widest font-black ${conv.status === 'approved' ? 'text-emerald-500' : 'text-slate-500'}`}>{conv.status}</p>
+                          <p className={`text-xl font-black font-mono mb-0.5 ${conv.status === 'approved' ? 'text-emerald-400' : conv.status === 'rejected' ? 'text-rose-500' : 'text-amber-400'}`}>+€{conv.amount?.toFixed(2)}</p>
+                          <p className={`text-[8px] uppercase font-black ${conv.status === 'approved' ? 'text-emerald-500' : 'text-slate-500'}`}>{conv.status}</p>
                         </div>
                       </div>
                     ))}
-                    {conversions.length === 0 && (
-                      <div className="py-20 text-center border-2 border-dashed border-white/10 rounded-[2rem] bg-white/[0.01]">
-                        <span className="text-5xl opacity-20 mb-6 block">🔌</span>
-                        <p className="text-[12px] font-black text-slate-500 uppercase tracking-widest">In attesa dei primi log dal server.</p>
-                      </div>
-                    )}
+                    {conversions.length === 0 && <div className="py-10 text-center"><p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Nessun log in entrata</p></div>}
                   </div>
               </div>
             </div>
@@ -623,232 +512,176 @@ export default function Dashboard() {
 
           {/* TAB 2: MARKETPLACE */}
           {activeTab === 'marketplace' && (
-             <div className="space-y-8">
-                <div className="pb-6 border-b border-white/5 stagger-1">
-                  <h1 className="text-4xl sm:text-6xl font-black text-white tracking-tight text-gradient mb-4">Marketplace B2B</h1>
-                  <p className="text-base text-slate-400 font-medium leading-relaxed max-w-3xl">Accesso diretto ai programmi di acquisizione istituzionali. I margini esposti rappresentano il Payout Netto garantito all'affiliato.</p>
+             <div className="space-y-6">
+                <div className="pb-4 border-b border-white/5 stagger-1">
+                  <h1 className="text-3xl font-black text-white tracking-tight mb-2">Marketplace B2B</h1>
+                  <p className="text-xs text-slate-400">Payout Netti per l'affiliato (Senza intermediari).</p>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 sm:gap-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                   {offers.map((offer, i) => (
-                    <div key={offer.id} className="card-glass card-glass-hover p-8 sm:p-10 flex flex-col relative group overflow-hidden" style={{animation: `slideUpFade 0.5s ease-out ${0.1 + (i*0.05)}s forwards`, opacity: 0}}>
-                      <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/5 rounded-bl-[100%] pointer-events-none group-hover:scale-125 transition-transform duration-700"></div>
-                      
-                      <div className="flex items-start gap-6 mb-8 border-b border-white/5 pb-8 relative z-10">
-                        <SafeImage src={offer.image_url} alt={offer.name} className="w-16 h-16 sm:w-20 sm:h-20 bg-white" />
+                    <div key={offer.id} className="card-glass p-6 flex flex-col relative group" style={{animation: `slideUpFade 0.4s ease-out ${0.1 + (i*0.05)}s forwards`, opacity: 0}}>
+                      <div className="flex items-start gap-4 mb-6 border-b border-white/5 pb-6">
+                        <SafeImage src={offer.image_url} alt="" className="w-12 h-12 bg-white" />
                         <div className="flex-1">
-                          <h4 className="font-black text-white text-2xl sm:text-3xl tracking-tight leading-none group-hover:text-blue-400 transition-colors mb-3">{offer.name}</h4>
-                          <div className="flex items-center gap-3">
-                            <span className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-lg ${offer.payout_type === 'CPL' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'}`}>{offer.payout_type || 'CPA'}</span>
-                            <button onClick={() => {setSelectedOffer(offer); setIsOfferModalOpen(true);}} className="text-[9px] text-slate-500 hover:text-white uppercase tracking-widest font-black transition-colors flex items-center gap-1">Policy ➔</button>
+                          <h4 className="font-black text-white text-lg leading-tight mb-2 truncate">{offer.name}</h4>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-1 rounded-md text-[8px] font-black uppercase tracking-widest bg-blue-500/10 text-blue-400">{offer.payout_type || 'CPA'}</span>
+                            <button onClick={() => {setSelectedOffer(offer); setIsOfferModalOpen(true);}} className="text-[8px] text-slate-500 hover:text-white uppercase font-black">Policy</button>
                           </div>
                         </div>
                       </div>
 
-                      <div className="mb-8 relative z-10">
-                        <p className="text-[10px] uppercase font-black text-slate-500 tracking-widest mb-2">Margine Netto</p>
-                        <p className="font-black font-mono text-emerald-400 text-4xl sm:text-5xl tracking-tight drop-shadow-[0_0_15px_rgba(16,185,129,0.2)]">€{offer.partner_payout?.toFixed(2)}</p>
+                      <div className="mb-6">
+                        <p className="text-[9px] uppercase font-black text-slate-500 tracking-widest mb-1">Margine Netto</p>
+                        <p className="font-black font-mono text-emerald-400 text-3xl">€{offer.partner_payout?.toFixed(2)}</p>
                       </div>
 
-                      <div className="mt-auto flex flex-col sm:flex-row gap-3 relative z-10">
-                        <button onClick={(e) => openSiteModal(offer, e)} className="flex-1 text-[10px] font-black text-slate-300 bg-white/5 border border-white/10 px-4 py-4 rounded-xl hover:bg-white/10 transition-colors uppercase tracking-widest active:scale-95 text-center">Infrastruttura</button>
-                        <button onClick={(e) => handleGetLink(offer, e)} className="flex-[2] btn-shimmer text-[10px] font-black uppercase tracking-widest text-white px-4 py-4 rounded-xl active:scale-95 transition-all text-center">Ottieni Link S2S</button>
+                      <div className="mt-auto flex gap-2">
+                        <button onClick={(e) => openSiteModal(offer, e)} className="flex-1 text-[9px] font-black text-slate-300 bg-white/5 px-3 py-3 rounded-xl hover:bg-white/10 uppercase tracking-widest">Hub</button>
+                        <button onClick={(e) => handleGetLink(offer, e)} className="flex-[2] text-[9px] font-black uppercase tracking-widest text-white bg-blue-600 hover:bg-blue-500 px-3 py-3 rounded-xl">Link S2S</button>
                       </div>
                     </div>
                   ))}
-                  {offers.length === 0 && <div className="col-span-full py-24 text-center stagger-2"><p className="text-sm font-black text-slate-500 uppercase tracking-widest animate-pulse">Sincronizzazione inventario in corso...</p></div>}
+                  {offers.length === 0 && <div className="col-span-full py-10 text-center stagger-2"><p className="text-[10px] font-black text-slate-500 uppercase tracking-widest animate-pulse">Sync Inventario...</p></div>}
                 </div>
              </div>
           )}
           
-          {/* TAB 3: ASSETS */}
+          {/* TAB 3 E 4 CON DESIGN DENSE */}
           {activeTab === 'assets' && (
-            <div className="space-y-8 max-w-4xl">
-              <div className="pb-6 border-b border-white/5 stagger-1">
-                <h1 className="text-4xl sm:text-6xl font-black text-white tracking-tight text-gradient mb-4">Sviluppo Asset</h1>
-                <p className="text-base text-slate-400 leading-relaxed font-medium">Richiedi la costruzione di nuovi Hub o dichiara sorgenti esterne per abilitare il Tracker S2S.</p>
+            <div className="space-y-6 max-w-3xl">
+              <div className="pb-4 border-b border-white/5 stagger-1">
+                <h1 className="text-3xl font-black text-white tracking-tight mb-2">Infrastruttura</h1>
+                <p className="text-xs text-slate-400">Deploy Hub o validazione sorgenti.</p>
               </div>
               
-              <div className="card-glass p-8 sm:p-14 relative overflow-hidden stagger-2">
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 mb-12">
-                  <div>
-                    <h2 className="text-3xl font-black text-white tracking-tight mb-3">1. Audit Canale Esterno</h2>
-                    <p className="text-sm text-slate-400 max-w-md leading-relaxed">Dichiara domini o profili social per la validazione Compliance.</p>
-                  </div>
+              <div className="card-glass p-8 stagger-2">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-lg font-black text-white">Audit Sorgente</h2>
                   <StatusBadge status={profile?.traffic_status} />
                 </div>
-
-                <div className="space-y-8">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div>
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">URL Principale</label>
-                      <input type="url" value={billing.registered_website} onChange={(e) => setBilling({...billing, registered_website: e.target.value})} className="input-premium font-mono text-blue-300" placeholder="https://..." />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Strategia & Budget Mensile</label>
-                      <input type="text" value={billing.traffic_volume} onChange={(e) => setBilling({...billing, traffic_volume: e.target.value})} className="input-premium" placeholder="Es. Meta Ads / 1000€" />
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">URL Principale</label>
+                    <input type="url" value={billing.registered_website} onChange={e => setBilling({...billing, registered_website: e.target.value})} className="input-premium font-mono text-blue-300" placeholder="https://" />
                   </div>
-                  
-                  <div className="pt-2 flex justify-end">
-                    <button onClick={handleSaveSettings} disabled={savingSettings} className="w-full sm:w-auto btn-shimmer text-white font-black text-[12px] px-12 py-5 rounded-2xl active:scale-95 uppercase tracking-widest disabled:opacity-50">
-                      {savingSettings ? 'Inoltro Sicuro...' : 'Sottoponi a Dipartimento Compliance'}
-                    </button>
+                  <div>
+                    <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Strategia & Budget</label>
+                    <input type="text" value={billing.traffic_volume} onChange={e => setBilling({...billing, traffic_volume: e.target.value})} className="input-premium" placeholder="Meta Ads / 1000€" />
                   </div>
                 </div>
-
-                {profile?.traffic_notes && (
-                  <div className="mt-12 p-8 sm:p-10 rounded-[2rem] border border-blue-500/20 bg-gradient-to-br from-blue-900/10 to-transparent relative overflow-hidden">
-                    <div className="absolute left-0 top-0 w-1.5 h-full bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,1)]"></div>
-                    <h3 className="text-sm font-black text-blue-400 mb-4 uppercase tracking-widest flex items-center gap-3">Storico Briefing Operativi</h3>
-                    <textarea readOnly value={profile.traffic_notes} className="bg-black/60 border border-white/5 text-slate-300 p-6 rounded-2xl font-mono text-xs sm:text-sm w-full resize-none outline-none hide-scrollbar leading-relaxed" rows={6} />
-                  </div>
-                )}
+                <button onClick={handleSaveSettings} disabled={savingSettings} className="w-full bg-blue-600 text-white font-black text-[10px] py-3.5 rounded-xl uppercase tracking-widest hover:bg-blue-500">{savingSettings ? 'Invio...' : 'Salva e Sottoponi'}</button>
               </div>
 
-              <div className="card-glass p-8 sm:p-14 relative overflow-hidden border-indigo-500/30 stagger-3">
-                <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/10 to-transparent pointer-events-none"></div>
-                <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-6 mb-8 relative z-10">
-                  <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight leading-none">2. Deploy "Turn-Key" Hub</h2>
-                  <span className="bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 font-black px-5 py-2.5 rounded-xl text-[10px] uppercase tracking-widest shadow-[0_0_20px_rgba(79,70,229,0.3)]">Servizio Incluso</span>
+              <div className="card-glass p-8 border border-indigo-500/30 stagger-3">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-lg font-black text-white">Deploy Hub (B2B)</h2>
+                  <span className="bg-indigo-500/20 text-indigo-400 px-3 py-1 rounded text-[8px] font-black uppercase tracking-widest">Incluso</span>
                 </div>
-                <p className="text-base text-slate-300 mb-10 leading-relaxed relative z-10 max-w-2xl font-medium">L'IT progetterà per te Hub di comparazione ad alta conversione. Ogni nuovo URL crittografato verrà consegnato nel Terminale.</p>
-                <button onClick={() => {setSelectedOffer(null); setIsSiteModalOpen(true);}} className="w-full sm:w-auto bg-white text-black hover:bg-slate-200 font-black text-[12px] uppercase tracking-widest px-14 py-6 rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.2)] transition-all hover:scale-[1.02] active:scale-95 relative z-10">
-                  Avvia Nuova Richiesta IT
-                </button>
+                <p className="text-xs text-slate-400 mb-6">L'IT progetterà per te Hub di comparazione ottimizzati per i link S2S.</p>
+                <button onClick={() => {setSelectedOffer(null); setIsSiteModalOpen(true);}} className="bg-white text-black font-black text-[10px] uppercase tracking-widest px-6 py-3.5 rounded-xl hover:bg-slate-200">Avvia Richiesta IT</button>
               </div>
             </div>
           )}
 
-          {/* TAB 4: KYC */}
           {activeTab === 'kyc' && (
-             <div className="space-y-8 max-w-4xl">
-               <div className="pb-6 border-b border-white/5 stagger-1">
-                 <h1 className="text-4xl sm:text-6xl font-black text-white tracking-tight text-gradient mb-4">Tesoreria Fiscale</h1>
-                 <p className="text-base text-slate-400 font-medium leading-relaxed">Dati protetti tramite crittografia AES-256. I pagamenti esigibili vengono liquidati automaticamente su circuito SEPA al 15 del mese.</p>
+             <div className="space-y-6 max-w-3xl">
+               <div className="pb-4 border-b border-white/5 stagger-1">
+                 <h1 className="text-3xl font-black text-white tracking-tight mb-2">Dati & KYC</h1>
+                 <p className="text-xs text-slate-400">Coordinate criptate per erogazione pagamenti S2S.</p>
                </div>
                
-               <div className="card-glass p-8 sm:p-14 relative overflow-hidden stagger-2">
-                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-12 border-b border-white/5 pb-10">
-                   <h2 className="text-3xl font-black text-white tracking-tight">Profilo Beneficiario</h2>
-                   <div className="bg-black/40 px-5 py-2.5 rounded-xl border border-white/10 text-[11px] font-black uppercase tracking-widest flex items-center gap-3 shadow-inner">
-                     Stato KYC: {profile?.kyc_status === 'approved' ? <span className="text-emerald-400 flex items-center gap-1.5"><span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span> Verificato</span> : profile?.kyc_status === 'pending' ? <span className="text-amber-400">In Audit</span> : <span className="text-slate-500">Mancante</span>}
-                   </div>
+               <div className="card-glass p-8 stagger-2">
+                 <div className="flex justify-between items-center mb-8 border-b border-white/5 pb-6">
+                   <h2 className="text-lg font-black text-white">Profilo Fiscale</h2>
+                   <StatusBadge status={profile?.kyc_status} />
                  </div>
 
-                 <div className="space-y-8 relative z-10">
-                  <div className="flex p-2 bg-black/50 rounded-2xl w-full sm:w-max border border-white/5 shadow-inner">
-                    <button onClick={() => setBilling({...billing, entity_type: 'privato'})} disabled={profile?.kyc_status === 'approved'} className={`px-12 py-4 text-[11px] font-black rounded-xl transition-all uppercase tracking-widest disabled:opacity-50 ${billing.entity_type === 'privato' ? 'bg-white text-black shadow-lg' : 'text-slate-500 hover:text-white'}`}>Privato</button>
-                    <button onClick={() => setBilling({...billing, entity_type: 'azienda'})} disabled={profile?.kyc_status === 'approved'} className={`px-12 py-4 text-[11px] font-black rounded-xl transition-all uppercase tracking-widest disabled:opacity-50 ${billing.entity_type === 'azienda' ? 'bg-white text-black shadow-lg' : 'text-slate-500 hover:text-white'}`}>Impresa / P.IVA</button>
+                  <div className="flex p-1 bg-black/40 rounded-xl w-max mb-6">
+                    <button onClick={() => setBilling({...billing, entity_type: 'privato'})} className={`px-8 py-2.5 text-[9px] font-black rounded-lg uppercase tracking-widest ${billing.entity_type === 'privato' ? 'bg-white text-black' : 'text-slate-500'}`}>Privato</button>
+                    <button onClick={() => setBilling({...billing, entity_type: 'azienda'})} className={`px-8 py-2.5 text-[9px] font-black rounded-lg uppercase tracking-widest ${billing.entity_type === 'azienda' ? 'bg-white text-black' : 'text-slate-500'}`}>P.IVA</button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-white/[0.02] p-8 sm:p-10 rounded-[2.5rem] border border-white/5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                     <div className="md:col-span-2">
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Intestatario Fiscale Conto</label>
-                      <input type="text" value={billing.full_name} onChange={(e) => setBilling({...billing, full_name: e.target.value})} disabled={profile?.kyc_status === 'approved'} className="input-premium" placeholder="Nome Completo o Ragione Sociale" />
+                      <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Intestatario</label>
+                      <input type="text" value={billing.full_name} onChange={e => setBilling({...billing, full_name: e.target.value})} className="input-premium" />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Codice Fiscale</label>
-                      <input type="text" value={billing.tax_id} onChange={(e) => setBilling({...billing, tax_id: e.target.value.toUpperCase()})} disabled={profile?.kyc_status === 'approved'} className="input-premium uppercase font-mono" placeholder="RSSMRA..." />
+                      <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">C.Fiscale</label>
+                      <input type="text" value={billing.tax_id} onChange={e => setBilling({...billing, tax_id: e.target.value.toUpperCase()})} className="input-premium uppercase font-mono" />
                     </div>
                     {billing.entity_type === 'azienda' && (
                       <div>
-                        <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Partita IVA</label>
-                        <input type="text" value={billing.vat_number} onChange={(e) => setBilling({...billing, vat_number: e.target.value})} disabled={profile?.kyc_status === 'approved'} className="input-premium font-mono" placeholder="IT0123..." />
+                        <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">P.IVA</label>
+                        <input type="text" value={billing.vat_number} onChange={e => setBilling({...billing, vat_number: e.target.value})} className="input-premium font-mono" />
                       </div>
                     )}
                     <div className="md:col-span-2">
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Indirizzo Sede Legale / Residenza</label>
-                      <input type="text" value={billing.address} onChange={(e) => setBilling({...billing, address: e.target.value})} disabled={profile?.kyc_status === 'approved'} className="input-premium" placeholder="Via, Numero, CAP, Città" />
+                      <label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Indirizzo</label>
+                      <input type="text" value={billing.address} onChange={e => setBilling({...billing, address: e.target.value})} className="input-premium" />
                     </div>
                     
-                    <div className="md:col-span-2 mt-4 pt-10 border-t border-white/5">
-                      <label className="block text-[11px] font-black text-emerald-500 uppercase tracking-widest mb-5 flex items-center gap-3"><span className="text-2xl drop-shadow-[0_0_10px_rgba(16,185,129,0.8)]">🔒</span> IBAN Erogazione Fondi (Circuito SEPA)</label>
-                      <input type="text" value={billing.payment_info} onChange={(e) => setBilling({...billing, payment_info: e.target.value.toUpperCase()})} disabled={profile?.kyc_status === 'approved'} className="input-premium text-xl sm:text-3xl font-mono uppercase tracking-[0.25em] border-emerald-500/40 focus:border-emerald-500 bg-emerald-500/5 text-emerald-400 py-6" placeholder="IT00X00000000000000000" />
+                    <div className="md:col-span-2 pt-4 border-t border-white/5">
+                      <label className="block text-[9px] font-black text-emerald-500 uppercase tracking-widest mb-2">🔒 IBAN (SEPA)</label>
+                      <input type="text" value={billing.payment_info} onChange={e => setBilling({...billing, payment_info: e.target.value.toUpperCase()})} className="input-premium font-mono text-emerald-400 bg-emerald-500/5 text-lg" placeholder="IT00X..." />
                     </div>
                   </div>
 
-                  {(!profile?.kyc_status || profile?.kyc_status === 'none' || profile?.kyc_status === 'pending') && (
-                    <div className="pt-6 flex justify-end">
-                      <button onClick={handleSaveSettings} disabled={savingSettings || profile?.kyc_status === 'approved'} className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-black text-[13px] px-16 py-6 rounded-2xl transition-all shadow-[0_10px_30px_rgba(16,185,129,0.4)] active:scale-95 uppercase tracking-widest disabled:opacity-50 hover:-translate-y-1">
-                        {savingSettings ? 'Crittografia...' : 'Sincronizza Dati Fiscali'}
-                      </button>
-                    </div>
-                  )}
-                </div>
+                  <button onClick={handleSaveSettings} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[11px] py-4 rounded-xl uppercase tracking-widest transition-all">Sincronizza Dati</button>
+               </div>
+
+               {/* Sezione Termini Visibile su Mobile */}
+               <div className="md:hidden mt-10 text-center">
+                 <Link href="/terms" className="text-[10px] font-bold text-slate-500 hover:text-white uppercase tracking-widest underline underline-offset-4">Leggi Termini e Condizioni</Link>
                </div>
              </div>
           )}
         </div>
       </main>
 
-      {/* MOBILE FLOATING BOTTOM NAV */}
-      <div className="md:hidden fixed bottom-6 left-4 right-4 z-50 flex justify-center">
-        <nav className="mobile-nav-glass w-full max-w-sm rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.9)] overflow-hidden">
-          <div className="flex justify-around p-2">
+      {/* BOTTOM NAV MOBILE */}
+      <div className="md:hidden fixed bottom-4 left-4 right-4 z-50 flex justify-center">
+        <nav className="bg-[#0B1221]/90 backdrop-blur-xl w-full max-w-sm rounded-[1.5rem] shadow-2xl border border-white/10">
+          <div className="flex justify-around p-1.5">
             {[ {id: 'overview', icon: '📊', label: 'Home'}, {id: 'marketplace', icon: '🏦', label: 'Offerte'}, {id: 'assets', icon: '🖥️', label: 'Hub'}, {id: 'kyc', icon: '🛡️', label: 'Dati'} ].map((tab) => (
-              <button key={tab.id} onClick={() => handleTabChange(tab.id)} className={`flex flex-col items-center justify-center w-full py-3 rounded-2xl transition-all relative ${activeTab === tab.id ? 'text-blue-400 bg-white/10 scale-105' : 'text-slate-500 hover:text-white'}`}>
-                <span className={`text-xl mb-1 transition-all ${activeTab === tab.id ? 'drop-shadow-[0_0_10px_rgba(59,130,246,0.8)] scale-110' : 'opacity-70'}`}>{tab.icon}</span>
-                <span className="text-[8px] font-black uppercase tracking-widest">{tab.label}</span>
-                {(tab.id === 'kyc') && profile?.[tab.id + '_status'] === 'pending' && <span className="absolute top-2 right-4 w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,1)] animate-pulse"></span>}
+              <button key={tab.id} onClick={() => handleTabChange(tab.id)} className={`flex flex-col items-center justify-center w-full py-2.5 rounded-xl transition-all relative ${activeTab === tab.id ? 'text-blue-400 bg-white/10' : 'text-slate-500'}`}>
+                <span className="text-xl mb-0.5">{tab.icon}</span>
+                <span className="text-[7px] font-black uppercase tracking-widest">{tab.label}</span>
+                {(tab.id === 'kyc') && profile?.[tab.id + '_status'] === 'pending' && <span className="absolute top-2 right-4 w-1.5 h-1.5 rounded-full bg-amber-500"></span>}
               </button>
             ))}
           </div>
         </nav>
       </div>
 
-      {/* MODALI A MOLLA (CINEMATIC) */}
+      {/* MODALI */}
       {isStrategyModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-[#020617]/95 backdrop-blur-xl">
-          <div className="card-glass p-1 rounded-[3rem] max-w-5xl w-full relative overflow-hidden flex flex-col max-h-[90vh] shadow-[0_0_100px_rgba(59,130,246,0.15)] modal-animate">
-            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-600 via-indigo-500 to-emerald-400"></div>
-            <div className="p-8 sm:p-14 overflow-y-auto hide-scrollbar">
-              <div className="flex justify-between items-start mb-12 pb-8 border-b border-white/5">
-                <div>
-                  <div className="inline-block px-4 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-full text-[10px] font-black text-blue-400 uppercase tracking-widest mb-6">Confidential Protocol</div>
-                  <h2 className="text-4xl sm:text-6xl font-black text-white tracking-tight mb-4 leading-none">Terminale Operativo</h2>
-                  <p className="text-base sm:text-lg text-slate-400 max-w-2xl leading-relaxed font-medium">Benvenuto in FinancePartner. Abbiamo rimosso la pubblicità, il design amatoriale e i vecchi cookie per fornirti l'infrastruttura di acquisizione più potente d'Europa.</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-black/50 border border-white/5 p-10 rounded-[2.5rem] relative overflow-hidden group hover:border-blue-500/30 transition-all">
-                  <div className="w-14 h-14 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-center justify-center text-2xl mb-6">🔌</div>
-                  <h3 className="text-2xl font-black text-white mb-3 tracking-tight">Precisione S2S</h3>
-                  <p className="text-sm text-slate-400 leading-relaxed font-medium">Il mercato perde il 30% delle vendite su iOS. Qui i server comunicano <strong className="text-white">direttamente tramite API</strong> col nostro database. Zero click persi.</p>
-                </div>
-                <div className="bg-black/50 border border-white/5 p-10 rounded-[2.5rem] relative overflow-hidden group hover:border-emerald-500/30 transition-all">
-                  <div className="w-14 h-14 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center text-2xl mb-6">💶</div>
-                  <h3 className="text-2xl font-black text-white mb-3 tracking-tight">L'Hub Multilink</h3>
-                  <p className="text-sm text-slate-400 leading-relaxed font-medium">La finanza paga le CPA più alte. Richiedi in "Infrastrutture" il tuo <strong>Hub Web</strong>. L'utente sceglie la banca migliore e il Conversion Rate esplode.</p>
-                </div>
-                <div className="md:col-span-2 bg-rose-950/20 border border-rose-900/50 p-10 rounded-[2.5rem] flex flex-col sm:flex-row gap-8 items-center">
-                  <div className="w-20 h-20 shrink-0 bg-rose-500/10 rounded-full flex items-center justify-center text-4xl shadow-[0_0_30px_rgba(244,63,94,0.2)]">⚠️</div>
-                  <div>
-                    <h3 className="text-xl font-black text-rose-400 mb-2 tracking-tight">Policy Zero Tolleranza</h3>
-                    <p className="text-sm text-rose-200/70 leading-relaxed font-medium">È vietato il traffico "Incentivato" e il "Brand Bidding". Le violazioni per lead fraudolenti comportano lo storno istantaneo delle commissioni a tutela del network bancario.</p>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-12 pt-10 border-t border-white/5 flex justify-end">
-                <button onClick={() => setIsStrategyModalOpen(false)} className="bg-white text-black font-black text-[12px] uppercase tracking-widest px-14 py-6 rounded-2xl shadow-[0_10px_40px_rgba(255,255,255,0.2)] hover:scale-105 active:scale-95 transition-all">Inizializza Terminale</button>
-              </div>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#020617]/95 backdrop-blur-sm">
+          <div className="card-glass p-8 rounded-3xl max-w-2xl w-full modal-animate">
+            <h2 className="text-2xl font-black text-white mb-2">Protocollo Operativo</h2>
+            <p className="text-xs text-slate-400 mb-6">Tracciamento S2S attivo. I server bancari comunicano in background. Zero click persi su iOS.</p>
+            <div className="bg-rose-900/10 border border-rose-500/20 p-4 rounded-xl mb-6">
+              <h3 className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-1">⚠️ Policy Zero Tolleranza</h3>
+              <p className="text-[11px] text-rose-200/70">Vietato traffico Incentivato e Brand Bidding. Rischio storno istantaneo.</p>
             </div>
+            <button onClick={() => setIsStrategyModalOpen(false)} className="w-full bg-white text-black font-black text-[10px] uppercase tracking-widest py-3.5 rounded-xl">Inizializza Terminale</button>
           </div>
         </div>
       )}
 
       {isSiteModalOpen && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-[#020617]/95 backdrop-blur-xl">
-          <div className="card-glass p-8 sm:p-14 rounded-[3rem] max-w-2xl w-full relative overflow-hidden border border-indigo-500/30 modal-animate shadow-[0_20px_80px_rgba(79,70,229,0.3)]">
-            <div className="absolute top-0 left-0 w-full h-1.5 bg-indigo-500 shadow-[0_0_30px_rgba(79,70,229,0.8)]"></div>
-            <h2 className="text-4xl font-black text-white mb-3 tracking-tight">Deploy Infrastruttura</h2>
-            <p className="text-base text-slate-400 mb-10 leading-relaxed font-medium">Target compilazione: <strong className="text-white bg-white/10 px-3 py-1 rounded-md">{selectedOffer ? selectedOffer.name : "Hub Globale B2B"}</strong>.</p>
-            <form onSubmit={handleRequestSiteSubmit} className="space-y-8">
-              <div><label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Posizionamento & Sorgente Traffico</label><textarea required rows="3" value={siteForm.whereToPromote} onChange={(e) => setSiteForm({...siteForm, whereToPromote: e.target.value})} className="input-premium resize-none text-base" placeholder="Es. TikTok Bio + Campagne Meta Ads focalizzate sul risparmio..."></textarea></div>
-              <div><label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-3">Obiettivi di Volume (KPI)</label><input type="text" required value={siteForm.goals} onChange={(e) => setSiteForm({...siteForm, goals: e.target.value})} className="input-premium text-base" placeholder="Es. Budget 100€/Giorno | 300 Lead/Mese" /></div>
-              <div className="flex flex-col sm:flex-row gap-5 pt-6">
-                <button type="button" onClick={() => setIsSiteModalOpen(false)} className="flex-1 text-[12px] font-black uppercase tracking-widest text-slate-400 bg-white/5 hover:bg-white/10 py-6 rounded-2xl transition-colors active:scale-95 border border-white/5">Annulla</button>
-                <button type="submit" disabled={savingSettings} className="flex-[2] btn-shimmer text-[12px] font-black uppercase tracking-widest text-white py-6 rounded-2xl shadow-[0_10px_30px_rgba(79,70,229,0.4)] active:scale-95 transition-all disabled:opacity-50">TRASMETTI BRIEFING</button>
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-[#020617]/90 backdrop-blur-sm">
+          <div className="card-glass p-8 rounded-3xl max-w-md w-full modal-animate">
+            <h2 className="text-xl font-black text-white mb-1">Deploy IT</h2>
+            <p className="text-[9px] text-slate-400 uppercase tracking-widest mb-6">Target: {selectedOffer ? selectedOffer.name : "Hub Globale"}</p>
+            <form onSubmit={handleRequestSiteSubmit} className="space-y-4">
+              <div><label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Sorgente Traffico</label><textarea required rows="2" value={siteForm.whereToPromote} onChange={e=>setSiteForm({...siteForm, whereToPromote: e.target.value})} className="input-premium resize-none text-sm"></textarea></div>
+              <div><label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Budget KPI</label><input type="text" required value={siteForm.goals} onChange={e=>setSiteForm({...siteForm, goals: e.target.value})} className="input-premium text-sm" /></div>
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setIsSiteModalOpen(false)} className="flex-1 text-[9px] font-black uppercase text-slate-400 bg-white/5 py-3.5 rounded-xl">Annulla</button>
+                <button type="submit" disabled={savingSettings} className="flex-[2] text-[9px] font-black uppercase text-white bg-indigo-600 hover:bg-indigo-500 py-3.5 rounded-xl">Invia Briefing</button>
               </div>
             </form>
           </div>
@@ -856,55 +689,40 @@ export default function Dashboard() {
       )}
 
       {isOfferModalOpen && selectedOffer && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-[#020617]/95 backdrop-blur-xl" onClick={() => setIsOfferModalOpen(false)}>
-          <div className="card-glass p-8 sm:p-14 rounded-[3rem] max-w-3xl w-full shadow-[0_30px_100px_rgba(0,0,0,1)] relative modal-animate" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-start mb-10 border-b border-white/5 pb-10">
-              <div className="flex items-center gap-8">
-                <SafeImage src={selectedOffer.image_url} alt={selectedOffer.name} className="w-24 h-24 bg-white" />
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-[#020617]/90 backdrop-blur-sm" onClick={() => setIsOfferModalOpen(false)}>
+          <div className="card-glass p-8 rounded-3xl max-w-xl w-full modal-animate" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-start mb-6">
+              <div className="flex items-center gap-4">
+                <SafeImage src={selectedOffer.image_url} alt="" className="w-12 h-12 bg-white" />
                 <div>
-                  <h2 className="text-4xl sm:text-5xl font-black text-white tracking-tight leading-none mb-4">{selectedOffer.name}</h2>
-                  <div className="flex flex-wrap gap-3">
-                    <span className="px-4 py-2 rounded-xl text-[10px] font-black text-slate-300 bg-white/10 border border-white/5 uppercase tracking-widest">Modello {selectedOffer.payout_type || 'CPA'}</span>
-                    <span className="px-4 py-2 rounded-xl text-[10px] font-black text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 uppercase tracking-widest shadow-[0_0_15px_rgba(16,185,129,0.1)]">Margine Netto: €{selectedOffer.partner_payout?.toFixed(2)}</span>
-                  </div>
+                  <h2 className="text-xl font-black text-white mb-1">{selectedOffer.name}</h2>
+                  <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded uppercase tracking-widest">Netto: €{selectedOffer.partner_payout?.toFixed(2)}</span>
                 </div>
               </div>
-              <button onClick={() => setIsOfferModalOpen(false)} className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center font-bold text-xl transition-all">✕</button>
+              <button onClick={() => setIsOfferModalOpen(false)} className="text-slate-500">✕</button>
             </div>
             
-            <div className="space-y-8 max-h-[50vh] overflow-y-auto hide-scrollbar pr-2">
-              <div>
-                <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest mb-4">Protocollo Informativo</h4>
-                <p className="text-base text-slate-300 leading-relaxed whitespace-pre-wrap bg-black/40 p-8 rounded-[2rem] border border-white/5 font-mono">{selectedOffer.description || 'Dettagli tecnici non forniti dal network.'}</p>
+            <div className="space-y-4 max-h-[40vh] overflow-y-auto hide-scrollbar text-sm text-slate-300">
+              <div className="bg-[#020617] p-4 rounded-xl border border-white/5">
+                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Target Geo & Traffico</p>
+                <p className="font-mono text-[11px] text-blue-200">{selectedOffer.allowed_countries || 'Italia (IT)'} • {selectedOffer.allowed_traffic || 'Social, Native, SEO'}</p>
               </div>
-              
-              <div className="grid grid-cols-2 gap-5">
-                 <div className="bg-black/40 border border-white/5 p-8 rounded-[2rem]">
-                   <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Geo Target (Nazioni)</p>
-                   <p className="text-lg font-black text-white tracking-tight">{selectedOffer.allowed_countries || 'Italia (IT)'}</p>
-                 </div>
-                 <div className="bg-black/40 border border-white/5 p-8 rounded-[2rem]">
-                   <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Traffico Autorizzato</p>
-                   <p className="text-lg font-black text-emerald-400 tracking-tight">{selectedOffer.allowed_traffic || 'Meta, TikTok, SEO, Native'}</p>
-                 </div>
-              </div>
-              
+              <p className="font-mono text-[11px] leading-relaxed opacity-80">{selectedOffer.description}</p>
               {selectedOffer.restrictions && (
-                <div className="bg-rose-950/20 border border-rose-900/50 p-8 rounded-[2rem]">
-                   <p className="text-[11px] font-black text-rose-400 uppercase tracking-widest mb-3 flex items-center gap-3"><span className="text-rose-500 text-xl drop-shadow-[0_0_10px_rgba(244,63,94,0.8)]">⚠️</span> Divieti Assoluti</p>
-                   <p className="text-sm font-medium text-rose-200/80 leading-relaxed">{selectedOffer.restrictions}</p>
+                <div className="bg-rose-900/10 border border-rose-500/20 p-4 rounded-xl">
+                  <p className="text-[9px] font-black text-rose-400 uppercase tracking-widest mb-1">Divieti Assoluti</p>
+                  <p className="text-[11px] font-mono text-rose-200/80">{selectedOffer.restrictions}</p>
                 </div>
               )}
             </div>
             
-            <div className="mt-12 pt-10 border-t border-white/5 flex flex-col sm:flex-row gap-5">
-              <button onClick={(e) => handleGetLink(selectedOffer, e)} className="flex-[2] btn-shimmer text-[12px] font-black uppercase tracking-widest text-white py-6 rounded-2xl transition-all shadow-[0_10px_30px_rgba(59,130,246,0.4)] active:scale-95">Ottieni Link S2S Crittografato</button>
-              <button onClick={(e) => {setIsOfferModalOpen(false); openSiteModal(selectedOffer, e);}} className="flex-1 text-[12px] font-black uppercase tracking-widest text-white bg-white/5 border border-white/10 hover:bg-white/10 py-6 rounded-2xl transition-all active:scale-95">Deploy Hub</button>
+            <div className="mt-6 pt-4 border-t border-white/5 flex gap-3">
+              <button onClick={(e) => handleGetLink(selectedOffer, e)} className="flex-[2] text-[10px] font-black uppercase tracking-widest bg-blue-600 text-white py-3.5 rounded-xl">Link S2S</button>
+              <button onClick={(e) => {setIsOfferModalOpen(false); openSiteModal(selectedOffer, e);}} className="flex-1 text-[10px] font-black uppercase tracking-widest bg-white/5 text-white py-3.5 rounded-xl">Hub</button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }

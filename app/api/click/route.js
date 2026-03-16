@@ -1,47 +1,47 @@
+import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
-import { supabase } from '../../../lib/supabaseClient';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function GET(request) {
-  const { searchParams } = new URL(request.url);
-  
-  // Prende i dati dall'URL generato dalla dashboard
-  const offer_id = searchParams.get('offer_id');
-  const subid = searchParams.get('subid');
-
-  // Se mancano dati, rimanda alla home per sicurezza
-  if (!offer_id || !subid) {
-    return NextResponse.redirect('https://financepartner.netlify.app');
-  }
-
   try {
-    // 1. REGISTRA IL CLICK NEL DATABASE (Aggiorna le statistiche in Dashboard)
-    await supabase.from('clicks').insert([{
-      offer_id: offer_id,
-      affiliate_id: subid
-    }]);
+    const { searchParams } = new URL(request.url);
+    const offerId = searchParams.get('offer_id');
+    const subid = searchParams.get('subid');
 
-    // 2. RECUPERA IL TUO LINK FINANCEADS DAL DATABASE
-    const { data: offer } = await supabase
-      .from('offers')
-      .select('base_link')
-      .eq('id', offer_id)
-      .single();
-
-    if (!offer || !offer.base_link) {
-      return NextResponse.redirect('https://financepartner.netlify.app');
+    if (!offerId || !subid) {
+      return NextResponse.redirect(new URL('/', request.url));
     }
 
-    // 3. COSTRUISCE IL LINK FINALE (La Magia)
-    // Prende il tuo link (es. https://financeads.net/tc.php?t=12345) 
-    // e ci attacca in automatico "&subid=ID_DELL_AFFILIATO"
-    const separator = offer.base_link.includes('?') ? '&' : '?';
-    const finalFinanceAdsUrl = `${offer.base_link}${separator}subid=${subid}`;
+    // 1. Cerca l'offerta nel database per prendere il link di FinanceAds
+    const { data: offer } = await supabase
+      .from('offers')
+      .select('tracking_link')
+      .eq('id', offerId)
+      .single();
 
-    // 4. REINDIRIZZA ALLA BANCA (L'utente non si accorge di nulla)
-    return NextResponse.redirect(finalFinanceAdsUrl);
+    // 2. Salva il Click nel Database (Questo farà muovere il grafico nella Dashboard!)
+    await supabase.from('clicks').insert({
+      affiliate_id: subid,
+      offer_id: offerId
+    });
+
+    // 3. Costruisci il link finale di FinanceAds aggiungendo il SubID
+    // Assumiamo che il tracking_link abbia già un "?" o una "&", usiamo la sintassi sicura
+    let finalUrl = offer?.tracking_link || '/';
+    if (finalUrl !== '/') {
+      const separator = finalUrl.includes('?') ? '&' : '?';
+      // Aggiungiamo il subid. FinanceAds di solito usa "subid="
+      finalUrl = `${finalUrl}${separator}subid=${subid}`;
+    }
+
+    // 4. Reindirizza l'utente (l'operazione dura meno di 50ms, l'utente non se ne accorge)
+    return NextResponse.redirect(finalUrl);
 
   } catch (error) {
-    console.error("Errore nel tracker:", error);
-    return NextResponse.redirect('https://financepartner.netlify.app');
+    console.error("Errore nel tracking link:", error);
+    return NextResponse.redirect(new URL('/', request.url));
   }
 }
