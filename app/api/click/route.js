@@ -1,8 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
+// Inizializziamo Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function GET(request) {
@@ -11,37 +12,47 @@ export async function GET(request) {
     const offerId = searchParams.get('offer_id');
     const subid = searchParams.get('subid');
 
+    // Se mancano i parametri, torna alla home
     if (!offerId || !subid) {
       return NextResponse.redirect(new URL('/', request.url));
     }
 
-    // 1. Cerca l'offerta nel database per prendere il link di FinanceAds
-    const { data: offer } = await supabase
+    // 1. Cerca il link dell'offerta nel DB
+    const { data: offer, error } = await supabase
       .from('offers')
       .select('tracking_link')
       .eq('id', offerId)
       .single();
 
-    // 2. Salva il Click nel Database (Questo farà muovere il grafico nella Dashboard!)
+    // Se c'è un errore o il link è vuoto, c'è un problema nel DB
+    if (error || !offer || !offer.tracking_link) {
+      console.error("Offerta non trovata o tracking_link vuoto:", error);
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+
+    // 2. Salva il Click nel Database (Aggiorna il grafico in Dashboard!)
     await supabase.from('clicks').insert({
       affiliate_id: subid,
       offer_id: offerId
     });
 
-    // 3. Costruisci il link finale di FinanceAds aggiungendo il SubID
-    // Assumiamo che il tracking_link abbia già un "?" o una "&", usiamo la sintassi sicura
-    let finalUrl = offer?.tracking_link || '/';
-    if (finalUrl !== '/') {
-      const separator = finalUrl.includes('?') ? '&' : '?';
-      // Aggiungiamo il subid. FinanceAds di solito usa "subid="
-      finalUrl = `${finalUrl}${separator}subid=${subid}`;
+    // 3. Costruisci il link finale di FinanceAds
+    let finalUrl = offer.tracking_link.trim();
+    
+    // Sicurezza: se manca https:// lo aggiungiamo
+    if (!finalUrl.startsWith('http')) {
+      finalUrl = 'https://' + finalUrl;
     }
 
-    // 4. Reindirizza l'utente (l'operazione dura meno di 50ms, l'utente non se ne accorge)
+    // Aggiungiamo il subid per tracciare la vendita su FinanceAds
+    const separator = finalUrl.includes('?') ? '&' : '?';
+    finalUrl = `${finalUrl}${separator}subid=${subid}`;
+
+    // 4. Manda l'utente alla pagina della banca (FinanceAds)
     return NextResponse.redirect(finalUrl);
 
   } catch (error) {
-    console.error("Errore nel tracking link:", error);
+    console.error("Errore Critico API Click:", error);
     return NextResponse.redirect(new URL('/', request.url));
   }
 }
