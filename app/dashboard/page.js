@@ -118,10 +118,24 @@ export default function Dashboard() {
     if (!isMounted) return;
 
     const initApp = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return router.push('/login');
+      // 1. Forza Supabase a leggere i token dall'URL prima di fare qualsiasi cosa
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      // 2. Scudo Anti-Espulsione: Se non c'è l'utente, controlla se c'è un token in elaborazione
+      if (!session?.user) {
+        if (!window.location.hash.includes('access_token')) {
+           // Se non c'è proprio niente, allora sbattilo fuori al login
+           return router.push('/login');
+        }
+        // Se c'è un token ma Supabase sta ancora caricando, aspetta mezzo secondo e riprova
+        setTimeout(() => initApp(), 500);
+        return;
+      }
+
+      const user = session.user;
       setUser(user);
 
+      // Rilevamento Dispositivo e IP
       const isDeviceAuthorized = localStorage.getItem('fp_device_auth_v1');
       let ip = 'Sconosciuto';
       try {
