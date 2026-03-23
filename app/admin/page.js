@@ -9,7 +9,7 @@ export default function AdminDashboard() {
   const [profiles, setProfiles] = useState([]);
   const [offers, setOffers] = useState([]); 
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('sites'); // Impostato su 'sites' per farti vedere subito la modifica
+  const [activeTab, setActiveTab] = useState('sites'); 
   
   const [siteLinks, setSiteLinks] = useState({});
 
@@ -42,6 +42,7 @@ export default function AdminDashboard() {
     const fetchAdminData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+      
       if (!user || user.email !== adminEmail) {
         alert("⛔ SECURITY BREACH: Accesso negato.");
         router.push('/dashboard');
@@ -153,8 +154,9 @@ export default function AdminDashboard() {
 
   if (loading) return <div className="min-h-screen bg-[#030509] flex items-center justify-center"><div className="w-12 h-12 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div></div>;
 
-  const pendingTraffic = profiles.filter(p => p.traffic_status === 'pending' && !p.traffic_notes?.includes('Richiesta Sito'));
-  const pendingSites = profiles.filter(p => p.traffic_status === 'pending' && p.traffic_notes?.includes('Richiesta Sito'));
+  // I FILTRI MAGICI CORRETTI
+  const pendingTraffic = profiles.filter(p => p.traffic_status === 'pending' && !p.traffic_notes?.includes('Richiesta Hub IT: SÌ'));
+  const pendingSites = profiles.filter(p => p.traffic_status === 'pending' && p.traffic_notes?.includes('Richiesta Hub IT: SÌ'));
   const pendingKyc = profiles.filter(p => p.kyc_status === 'pending');
   const readyForPayout = profiles.filter(p => p.wallet_approved > 0);
 
