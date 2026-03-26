@@ -9,16 +9,17 @@ export async function GET(request) {
     const offerId = searchParams.get('offer_id');
     const subid = searchParams.get('subid');
 
+    // Se mancano i dati, torna alla home del nuovo dominio
     if (!offerId || !subid) {
       return NextResponse.redirect(new URL('https://financepartnerr.it', request.url));
     }
 
-    // Inizializzazione corretta del client Supabase
+    // Inizializzazione Server-Side
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 1. Cerca il link dell'offerta
+    // 1. Recupero link offerta
     const { data: offer, error } = await supabase
       .from('offers')
       .select('tracking_link')
@@ -29,13 +30,13 @@ export async function GET(request) {
       return NextResponse.redirect(new URL('https://financepartnerr.it', request.url));
     }
 
-    // 2. Registra il Click
+    // 2. Registrazione Click nel DB
     await supabase.from('clicks').insert({
       affiliate_id: subid,
       offer_id: offerId
     });
 
-    // 3. Costruisci il redirect verso FinanceAds
+    // 3. Preparazione URL finale per FinanceAds
     let finalUrl = offer.tracking_link.trim();
     if (!finalUrl.startsWith('http')) finalUrl = 'https://' + finalUrl;
     const separator = finalUrl.includes('?') ? '&' : '?';
