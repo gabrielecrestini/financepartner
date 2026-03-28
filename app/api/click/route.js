@@ -9,9 +9,9 @@ export async function GET(request) {
     const offerId = searchParams.get('offer_id');
     const subid = searchParams.get('subid');
 
-    // Se mancano i dati, torna alla home del nuovo dominio
+    // Se mancano i dati, torna alla home di PartnerVest
     if (!offerId || !subid) {
-      return NextResponse.redirect(new URL('https://financepartnerr.it', request.url));
+      return NextResponse.redirect(new URL('https://partnervest.net', request.url));
     }
 
     // Inizializzazione Server-Side
@@ -19,7 +19,7 @@ export async function GET(request) {
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 1. Recupero link offerta
+    // 1. Cerca il tracking link dell'offerta
     const { data: offer, error } = await supabase
       .from('offers')
       .select('tracking_link')
@@ -27,25 +27,29 @@ export async function GET(request) {
       .single();
 
     if (error || !offer || !offer.tracking_link) {
-      return NextResponse.redirect(new URL('https://financepartnerr.it', request.url));
+      console.error("Offerta non trovata:", error);
+      return NextResponse.redirect(new URL('https://partnervest.net', request.url));
     }
 
-    // 2. Registrazione Click nel DB
-    await supabase.from('clicks').insert({
+    // 2. Registra il Click nel DB (per le stats in tempo reale)
+    supabase.from('clicks').insert({
       affiliate_id: subid,
       offer_id: offerId
-    });
+    }).then();
 
-    // 3. Preparazione URL finale per FinanceAds
+    // 3. Prepara l'URL di FinanceAds
     let finalUrl = offer.tracking_link.trim();
     if (!finalUrl.startsWith('http')) finalUrl = 'https://' + finalUrl;
+    
+    // Aggiungiamo il subid per tracciare la vendita
     const separator = finalUrl.includes('?') ? '&' : '?';
     const redirectTarget = `${finalUrl}${separator}subid=${subid}`;
 
-    return NextResponse.redirect(redirectTarget);
+    // 4. Redirect 302 alla banca
+    return NextResponse.redirect(redirectTarget, 302);
 
   } catch (error) {
     console.error("Errore API Click:", error);
-    return NextResponse.redirect(new URL('https://financepartnerr.it', request.url));
+    return NextResponse.redirect(new URL('https://partnervest.net', request.url));
   }
 }

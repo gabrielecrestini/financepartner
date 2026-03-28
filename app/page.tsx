@@ -13,7 +13,7 @@ export default function Home() {
         @keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
         @keyframes floatSlow { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(-15px) rotate(1deg); } }
         @keyframes floatFast { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(12px) rotate(-1deg); } }
-        @keyframes pulseGlow { 0%, 100% { opacity: 0.2; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.1); } }
+        @keyframes pulseGlow { 0%, 100% { opacity: 0.15; transform: scale(1); } 50% { opacity: 0.3; transform: scale(1.1); } }
         
         .animate-fade-up { animation: fadeUp 1s cubic-bezier(0.16, 1, 0.3, 1) forwards; opacity: 0; }
         .delay-100 { animation-delay: 0.1s; }
@@ -26,7 +26,7 @@ export default function Home() {
         
         .marquee-container { display: flex; width: 200%; animation: scroll 50s linear infinite; }
         
-        /* Effetto Vetro Ultra-Premium (Stile Vercel/Linear) */
+        /* Effetto Vetro Ultra-Premium */
         .glass-card { background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); border: 1px solid rgba(255, 255, 255, 0.05); box-shadow: 0 4px 30px rgba(0,0,0,0.1); }
         .glass-card-hover:hover { border-color: rgba(59, 130, 246, 0.3); background: rgba(255, 255, 255, 0.04); transform: translateY(-5px); box-shadow: 0 20px 40px -10px rgba(59,130,246,0.15); }
         
@@ -38,15 +38,15 @@ export default function Home() {
 
       {/* BACKGROUND EFFECTS */}
       <div className="fixed inset-0 z-0 bg-grid-tech opacity-60 pointer-events-none"></div>
-      <div className="absolute top-[-10%] left-[-20%] md:left-[-10%] w-[80%] md:w-[60%] h-[50%] md:h-[70%] bg-blue-600/20 rounded-full blur-[120px] md:blur-[160px] pointer-events-none" style={{animation: 'pulseGlow 10s infinite'}}></div>
-      <div className="absolute bottom-[-10%] right-[-20%] md:right-[-10%] w-[70%] md:w-[50%] h-[40%] md:h-[60%] bg-indigo-900/30 rounded-full blur-[100px] md:blur-[150px] pointer-events-none" style={{animation: 'pulseGlow 12s infinite reverse'}}></div>
+      <div className="absolute top-[-10%] left-[-20%] md:left-[-10%] w-[100%] md:w-[60%] h-[50%] md:h-[70%] bg-blue-600/20 rounded-full blur-[100px] md:blur-[160px] pointer-events-none" style={{animation: 'pulseGlow 10s infinite'}}></div>
+      <div className="absolute bottom-[-10%] right-[-20%] md:right-[-10%] w-[90%] md:w-[50%] h-[40%] md:h-[60%] bg-indigo-900/30 rounded-full blur-[90px] md:blur-[150px] pointer-events-none" style={{animation: 'pulseGlow 12s infinite reverse'}}></div>
 
       {/* TOP NAVIGATION */}
-      <nav className="fixed w-full z-50 bg-[#02040A]/80 backdrop-blur-2xl border-b border-white/5 transition-all duration-300">
+      <nav className="fixed w-full z-50 bg-[#02040A]/85 backdrop-blur-2xl border-b border-white/5 transition-all duration-300">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12 h-16 sm:h-20 flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg sm:rounded-[0.8rem] flex items-center justify-center font-black text-white text-base sm:text-lg shadow-[0_0_20px_rgba(37,99,235,0.4)]">F</div>
-            <span className="font-black text-white text-lg sm:text-xl tracking-tight">Finance<span className="text-blue-500">Partner</span></span>
+            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg sm:rounded-[0.8rem] flex items-center justify-center font-black text-white text-base sm:text-lg shadow-[0_0_20px_rgba(37,99,235,0.4)]">P</div>
+            <span className="font-black text-white text-lg sm:text-xl tracking-tight">Partner<span className="text-blue-500">Vest</span></span>
           </div>
           
           <div className="hidden md:flex gap-10 text-[11px] font-black uppercase tracking-widest text-slate-400">
@@ -76,15 +76,15 @@ export default function Home() {
               <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-blue-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(59,130,246,0.8)]"></span> Accesso B2B a Numero Chiuso
             </div>
             
-            <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black text-white leading-[1.1] sm:leading-[1.05] tracking-tight mb-6 sm:mb-8 animate-fade-up delay-100">
+            <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black text-white leading-[1.15] sm:leading-[1.1] tracking-tight mb-6 sm:mb-8 animate-fade-up delay-100">
               L'Infrastruttura di <br className="hidden sm:block"/>Acquisizione <span className="text-gradient-blue">Definitiva.</span>
             </h1>
             
-            <p className="text-base sm:text-lg lg:text-xl text-slate-400 mb-8 sm:mb-10 leading-relaxed animate-fade-up delay-200 font-medium px-4 sm:px-0">
+            <p className="text-sm sm:text-base md:text-lg lg:text-xl text-slate-400 mb-8 sm:mb-10 leading-relaxed animate-fade-up delay-200 font-medium px-2 sm:px-0">
               Non siamo un semplice network di affiliazione. Siamo i tuoi soci tecnologici. Tracciamento Server-to-Server, zero cookie loss e le CPA finanziarie più alte del mercato europeo.
             </p>
             
-            <div className="flex flex-col sm:flex-row justify-center lg:justify-start gap-4 animate-fade-up delay-300 w-full sm:w-auto px-4 sm:px-0">
+            <div className="flex flex-col sm:flex-row justify-center lg:justify-start gap-4 animate-fade-up delay-300 w-full sm:w-auto px-2 sm:px-0">
               <Link href="/signup" className="flex items-center justify-center bg-blue-600 hover:bg-blue-500 text-white w-full sm:w-auto px-8 sm:px-10 py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-[11px] sm:text-[12px] uppercase tracking-widest transition-all shadow-[0_0_30px_rgba(37,99,235,0.4)] active:scale-95">
                 Richiedi Approvazione
               </Link>
@@ -95,11 +95,11 @@ export default function Home() {
 
             <div className="mt-10 sm:mt-12 flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 sm:gap-6 animate-fade-up delay-400">
               <div className="flex -space-x-3">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-[#02040A] bg-slate-800 flex items-center justify-center text-[10px] sm:text-xs">📈</div>
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-[#02040A] bg-indigo-800 flex items-center justify-center text-[10px] sm:text-xs">💶</div>
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-[#02040A] bg-blue-800 flex items-center justify-center text-[10px] sm:text-xs">🔒</div>
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-[#02040A] bg-slate-800 flex items-center justify-center text-[10px] sm:text-xs shadow-lg">📈</div>
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-[#02040A] bg-indigo-800 flex items-center justify-center text-[10px] sm:text-xs shadow-lg">💶</div>
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 border-[#02040A] bg-blue-800 flex items-center justify-center text-[10px] sm:text-xs shadow-lg">🔒</div>
               </div>
-              <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-widest text-center sm:text-left max-w-[250px]">
+              <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-widest text-center sm:text-left max-w-[250px] leading-relaxed">
                 Centinaia di migliaia di Euro in commissioni processate ogni mese.
               </p>
             </div>
@@ -187,37 +187,37 @@ export default function Home() {
       </section>
 
       {/* FEATURES / VALUE PROPOSITION */}
-      <section id="infrastruttura" className="py-24 sm:py-32 relative z-10">
+      <section id="infrastruttura" className="py-20 sm:py-32 relative z-10">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-12">
           
           <div className="text-center max-w-4xl mx-auto mb-16 sm:mb-20">
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-white mb-4 sm:mb-6 tracking-tight px-2">Il Vantaggio Competitivo sleale.</h2>
-            <p className="text-slate-400 text-base sm:text-lg leading-relaxed font-medium px-4">Risolviamo chirurgicamente i problemi del performance marketing amatoriale: blocchi dei cookie, ban improvvisi e margini ridotti all'osso dagli intermediari.</p>
+            <p className="text-slate-400 text-sm sm:text-base md:text-lg leading-relaxed font-medium px-2 sm:px-4">Risolviamo chirurgicamente i problemi del performance marketing amatoriale: blocchi dei cookie, ban improvvisi e margini ridotti all'osso dagli intermediari.</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
             {/* Box 1: S2S */}
-            <div className="glass-card glass-card-hover p-8 sm:p-10 rounded-[2rem] sm:rounded-[2.5rem] relative overflow-hidden group">
+            <div className="glass-card glass-card-hover p-6 sm:p-10 rounded-[2rem] sm:rounded-[2.5rem] relative overflow-hidden group">
               <div className="absolute inset-0 bg-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="w-14 h-14 sm:w-16 sm:h-16 bg-blue-600/10 border border-blue-500/20 rounded-[1rem] sm:rounded-[1.2rem] flex items-center justify-center text-2xl sm:text-3xl mb-6 sm:mb-8 relative z-10 shadow-[0_0_20px_rgba(37,99,235,0.1)]">🔌</div>
-              <h3 className="text-xl sm:text-2xl font-black text-white mb-3 sm:mb-4 tracking-tight relative z-10">Connessione S2S</h3>
-              <p className="text-sm text-slate-400 leading-relaxed relative z-10">Le vecchie piattaforme perdono il 30% dei dati su iOS. Noi utilizziamo Postback Server-to-Server: i server della banca ci comunicano l'avvenuta conversione in tempo reale e in modo blindato.</p>
+              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-blue-600/10 border border-blue-500/20 rounded-[1rem] sm:rounded-[1.2rem] flex items-center justify-center text-xl sm:text-3xl mb-5 sm:mb-8 relative z-10 shadow-[0_0_20px_rgba(37,99,235,0.1)]">🔌</div>
+              <h3 className="text-lg sm:text-2xl font-black text-white mb-3 sm:mb-4 tracking-tight relative z-10">Connessione S2S</h3>
+              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed relative z-10">Le vecchie piattaforme perdono il 30% dei dati su iOS. Noi utilizziamo Postback Server-to-Server: i server della banca ci comunicano l'avvenuta conversione in tempo reale e in modo blindato.</p>
             </div>
             
             {/* Box 2: Hub */}
-            <div className="glass-card glass-card-hover p-8 sm:p-10 rounded-[2rem] sm:rounded-[2.5rem] relative overflow-hidden group">
+            <div className="glass-card glass-card-hover p-6 sm:p-10 rounded-[2rem] sm:rounded-[2.5rem] relative overflow-hidden group">
               <div className="absolute inset-0 bg-indigo-600/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="w-14 h-14 sm:w-16 sm:h-16 bg-indigo-600/10 border border-indigo-500/20 rounded-[1rem] sm:rounded-[1.2rem] flex items-center justify-center text-2xl sm:text-3xl mb-6 sm:mb-8 relative z-10 shadow-[0_0_20px_rgba(79,70,229,0.1)]">🖥️</div>
-              <h3 className="text-xl sm:text-2xl font-black text-white mb-3 sm:mb-4 tracking-tight relative z-10">Deploy Hub B2B</h3>
-              <p className="text-sm text-slate-400 leading-relaxed relative z-10">Non possiedi infrastrutture ad alta conversione? Nessun problema. Il nostro dipartimento tecnico ospita e programma per te "Hub di Comparazione" gratuiti, massimizzando il tuo Conversion Rate.</p>
+              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-indigo-600/10 border border-indigo-500/20 rounded-[1rem] sm:rounded-[1.2rem] flex items-center justify-center text-xl sm:text-3xl mb-5 sm:mb-8 relative z-10 shadow-[0_0_20px_rgba(79,70,229,0.1)]">🖥️</div>
+              <h3 className="text-lg sm:text-2xl font-black text-white mb-3 sm:mb-4 tracking-tight relative z-10">Deploy Hub B2B</h3>
+              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed relative z-10">Non possiedi infrastrutture ad alta conversione? Nessun problema. Il nostro dipartimento tecnico ospita e programma per te "Hub di Comparazione" gratuiti, massimizzando il tuo Conversion Rate.</p>
             </div>
 
             {/* Box 3: Compliance */}
-            <div id="compliance" className="glass-card glass-card-hover p-8 sm:p-10 rounded-[2rem] sm:rounded-[2.5rem] relative overflow-hidden group">
+            <div id="compliance" className="glass-card glass-card-hover p-6 sm:p-10 rounded-[2rem] sm:rounded-[2.5rem] relative overflow-hidden group">
               <div className="absolute inset-0 bg-emerald-600/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="w-14 h-14 sm:w-16 sm:h-16 bg-emerald-600/10 border border-emerald-500/20 rounded-[1rem] sm:rounded-[1.2rem] flex items-center justify-center text-2xl sm:text-3xl mb-6 sm:mb-8 relative z-10 shadow-[0_0_20px_rgba(16,185,129,0.1)]">⚖️</div>
-              <h3 className="text-xl sm:text-2xl font-black text-white mb-3 sm:mb-4 tracking-tight relative z-10">Compliance Totale</h3>
-              <p className="text-sm text-slate-400 leading-relaxed relative z-10">Lavoriamo alla luce del sole. Le tue sorgenti di traffico vengono autorizzate preventivamente. Questo ci garantisce partnership stabili e ti assicura pagamenti liquidati su circuito SEPA.</p>
+              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-emerald-600/10 border border-emerald-500/20 rounded-[1rem] sm:rounded-[1.2rem] flex items-center justify-center text-xl sm:text-3xl mb-5 sm:mb-8 relative z-10 shadow-[0_0_20px_rgba(16,185,129,0.1)]">⚖️</div>
+              <h3 className="text-lg sm:text-2xl font-black text-white mb-3 sm:mb-4 tracking-tight relative z-10">Compliance Totale</h3>
+              <p className="text-xs sm:text-sm text-slate-400 leading-relaxed relative z-10">Lavoriamo alla luce del sole. Le tue sorgenti di traffico vengono autorizzate preventivamente. Questo ci garantisce partnership stabili e ti assicura pagamenti liquidati su circuito SEPA.</p>
             </div>
           </div>
 
@@ -225,7 +225,7 @@ export default function Home() {
       </section>
 
       {/* CTA FINALE */}
-      <section id="network" className="py-24 sm:py-32 relative overflow-hidden border-t border-white/5 bg-black/40">
+      <section id="network" className="py-20 sm:py-32 relative overflow-hidden border-t border-white/5 bg-black/40">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/10 via-[#02040A] to-[#02040A]"></div>
         
         <div className="max-w-[800px] mx-auto px-6 text-center relative z-10">
@@ -233,12 +233,12 @@ export default function Home() {
             Ammissione a Numero Chiuso
           </div>
           
-          <h2 className="text-3xl sm:text-5xl md:text-6xl font-black text-white mb-6 sm:mb-8 tracking-tight">Entra nell'Elite.</h2>
-          <p className="text-slate-400 mb-10 sm:mb-12 text-base sm:text-lg lg:text-xl font-medium leading-relaxed max-w-2xl mx-auto px-2">
-            FinancePartner è un circolo riservato a Media Buyer, Creator e Arbitraggisti del traffico. Se sai muovere volumi, noi ti diamo gli strumenti per non perdere nemmeno un centesimo.
+          <h2 className="text-3xl sm:text-5xl md:text-6xl font-black text-white mb-5 sm:mb-8 tracking-tight">Entra nell'Elite.</h2>
+          <p className="text-slate-400 mb-8 sm:mb-12 text-sm sm:text-base lg:text-lg font-medium leading-relaxed max-w-2xl mx-auto px-2">
+            PartnerVest è un circolo riservato a Media Buyer, Creator e Arbitraggisti del traffico. Se sai muovere volumi, noi ti diamo gli strumenti per non perdere nemmeno un centesimo.
           </p>
           
-          <div className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-5 w-full px-4 sm:px-0">
+          <div className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-5 w-full px-2 sm:px-0">
             <Link href="/signup" className="w-full sm:w-auto bg-white hover:bg-slate-200 text-black font-black text-[11px] sm:text-[12px] uppercase tracking-widest px-8 sm:px-12 py-4 sm:py-5 rounded-xl sm:rounded-2xl shadow-[0_0_40px_rgba(255,255,255,0.2)] transition-all hover:scale-105 active:scale-95 text-center">
               Candidati per l'Accesso
             </Link>
@@ -247,16 +247,16 @@ export default function Home() {
       </section>
 
       {/* FOOTER B2B CORPORATE */}
-      <footer className="bg-[#010205] py-12 sm:py-16 border-t border-white/5 relative z-10">
+      <footer className="bg-[#010205] py-10 sm:py-16 border-t border-white/5 relative z-10">
         <div className="max-w-[1400px] mx-auto px-6 lg:px-12 flex flex-col lg:flex-row items-center lg:items-start justify-between gap-10 lg:gap-0 text-center lg:text-left">
           
           {/* Brand Info */}
-          <div className="flex flex-col items-center lg:items-start gap-4 sm:gap-5 max-w-sm">
+          <div className="flex flex-col items-center lg:items-start gap-3 sm:gap-5 max-w-sm">
             <div className="flex items-center gap-2 sm:gap-3 opacity-60">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-white/10 rounded-[0.4rem] flex items-center justify-center font-black text-white text-[10px] sm:text-xs border border-white/10">F</div>
-              <span className="font-black text-white text-base sm:text-lg tracking-tight">FinancePartner</span>
+              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-white/10 rounded-[0.4rem] flex items-center justify-center font-black text-white text-[10px] sm:text-xs border border-white/10">P</div>
+              <span className="font-black text-white text-base sm:text-lg tracking-tight">PartnerVest</span>
             </div>
-            <p className="text-[9px] sm:text-[10px] text-slate-500 font-mono leading-relaxed">
+            <p className="text-[9px] sm:text-[10px] text-slate-500 font-mono leading-relaxed px-4 lg:px-0">
               Infrastruttura tecnologica indipendente B2B per il performance marketing. Tutte le campagne sono gestite in rigorosa osservanza delle normative finanziarie europee.
             </p>
           </div>
@@ -267,10 +267,9 @@ export default function Home() {
               <Link href="/login" className="hover:text-white transition-colors">Terminale Operativo</Link>
               <Link href="/terms" className="hover:text-white transition-colors">Policy & Privacy</Link>
             </div>
-            <div className="bg-white/5 border border-white/10 px-4 sm:px-5 py-2.5 rounded-lg flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-center mt-2 sm:mt-0">
-              <span className="text-slate-400 hidden sm:inline">Direct Support:</span>
-              <span className="text-slate-400 sm:hidden">Support:</span>
-              <a href="mailto:finance.partnerr@gmail.com" className="text-blue-400 hover:text-blue-300 transition-colors lowercase font-bold tracking-normal text-[11px] sm:text-xs break-all">finance.partnerr@gmail.com</a>
+            <div className="bg-white/5 border border-white/10 px-4 sm:px-5 py-2.5 rounded-lg flex flex-col sm:flex-row items-center gap-1 sm:gap-3 w-full sm:w-auto justify-center mt-2 sm:mt-0">
+              <span className="text-slate-400">Direct Support:</span>
+              <a href="mailto:finance.partnerr@gmail.com" className="text-blue-400 hover:text-blue-300 transition-colors lowercase font-bold tracking-normal text-[10px] sm:text-xs break-all">finance.partnerr@gmail.com</a>
             </div>
             <p className="mt-4 sm:mt-6 text-slate-700 opacity-60 font-mono">© 2026 B2B Financial Network. All rights reserved.</p>
           </div>

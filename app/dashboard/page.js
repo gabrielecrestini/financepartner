@@ -197,29 +197,27 @@ export default function Dashboard() {
   };
 
   // =======================================================================
-  // FUNZIONE COPIA LINK S2S - AGGIORNATA COL NUOVO DOMINIO DEFINITIVO
+  // FUNZIONE COPIA LINK S2S - AGGIORNATA AL BRAND PARTNERVEST
   // =======================================================================
   const handleGetLink = (offer, e) => {
     if (e) e.stopPropagation();
     
-    // Controllo Compliance
     if (profile?.traffic_status !== 'approved') {
       return showToast("⚠️ Sorgente in Audit. Attendi approvazione tecnica.", "error");
     }
     
-    // DEFINIZIONE DOMINIO DEFINITIVO (Doppia R)
-    const baseUrl = "https://financepartnerr.it";
+    // NUOVO DOMINIO
+    const baseUrl = "https://partnervest.net";
     const trackingLink = `${baseUrl}/api/click?offer_id=${offer.id}&subid=${user.id}`;
     
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(trackingLink)
-        .then(() => showToast("🔗 Link S2S copiato col nuovo dominio", 'success'))
+        .then(() => showToast("🔗 Link S2S copiato correttamente", 'success'))
         .catch(() => showToast("Errore durante la copia", "error"));
     } else {
-      // Fallback robusto per ogni dispositivo
       const textArea = document.createElement("textarea");
       textArea.value = trackingLink;
-      textArea.style.position = "fixed"; // Evita scorrimenti
+      textArea.style.position = "fixed"; 
       textArea.style.left = "-9999px";
       textArea.style.top = "0";
       document.body.appendChild(textArea);
@@ -227,7 +225,7 @@ export default function Dashboard() {
       textArea.select();
       try {
         document.execCommand('copy');
-        showToast("🔗 Link S2S copiato col nuovo dominio", 'success');
+        showToast("🔗 Link S2S copiato correttamente", 'success');
       } catch (err) {
         showToast("Incolla manualmente: " + trackingLink, "error");
       }
@@ -270,17 +268,11 @@ export default function Dashboard() {
     }
   };
 
-  const StatusBadge = ({ status }) => {
-    if (status === 'approved') return <span className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,1)]"></span> Auth</span>;
-    if (status === 'pending') return <span className="bg-amber-500/10 border border-amber-500/30 text-amber-400 px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-amber-400 rounded-full"></span> Audit</span>;
-    return <span className="bg-white/5 text-slate-400 border border-white/10 px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-widest">Required</span>;
-  };
-
   if (!isMounted) return null;
   if (loading) return <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center"><div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>;
 
   // =======================================================================
-  // DESIGN ORIGINALE: DEVICE AUTHORIZATION
+  // DESIGN: DEVICE AUTHORIZATION
   // =======================================================================
   if (securityLock) {
     return (
@@ -301,7 +293,7 @@ export default function Dashboard() {
   }
 
   // =======================================================================
-  // DESIGN ORIGINALE: GATEKEEPER
+  // DESIGN: GATEKEEPER
   // =======================================================================
   if (profile && profile.traffic_status !== 'approved') {
     return (
@@ -386,7 +378,7 @@ export default function Dashboard() {
 
       <div className="fixed inset-0 z-0 bg-[radial-gradient(rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
 
-      {/* TOAST ORIGINALE */}
+      {/* TOAST */}
       {settingsMsg.text && (
         <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[110] px-5 py-3 rounded-full text-[9px] font-black uppercase tracking-widest shadow-2xl border backdrop-blur-xl animate-[slideUpFade_0.3s_ease-out_forwards] ${settingsMsg.type === 'error' ? 'bg-rose-950/90 text-rose-200 border-rose-500/50' : 'bg-slate-900/90 text-blue-300 border-blue-500/50'}`}>
           {settingsMsg.text}
@@ -396,8 +388,8 @@ export default function Dashboard() {
       {/* SIDEBAR DESKTOP */}
       <aside className="hidden md:flex flex-col w-64 h-screen border-r border-white/5 bg-[#020617] p-6 shrink-0 relative z-40">
         <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center font-black text-white text-lg">F</div>
-          <div><span className="font-black text-white text-lg block leading-none">FinancePartner</span><span className="text-[8px] font-black text-blue-500 uppercase tracking-widest mt-1">B2B Terminal</span></div>
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center font-black text-white text-lg shadow-[0_0_15px_rgba(37,99,235,0.3)]">P</div>
+          <div><span className="font-black text-white text-lg block leading-none">PartnerVest</span><span className="text-[8px] font-black text-blue-500 uppercase tracking-widest mt-1">B2B Terminal</span></div>
         </div>
         <nav className="space-y-1 flex-1">
           {[ {id: 'overview', icon: '📊', label: 'Terminale'}, {id: 'marketplace', icon: '🏦', label: 'Offerte'}, {id: 'assets', icon: '🖥️', label: 'Infrastruttura'}, {id: 'kyc', icon: '🛡️', label: 'Dati & KYC'} ].map(tab => (
@@ -415,13 +407,13 @@ export default function Dashboard() {
       {/* HEADER MOBILE */}
       <header className="md:hidden flex items-center justify-between p-4 border-b border-white/5 bg-[#020617] sticky top-0 z-40 backdrop-blur-md">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-black text-white text-sm">F</div>
-          <span className="font-black text-white text-lg tracking-tight">FinancePartner</span>
+          <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center font-black text-white text-sm">P</div>
+          <span className="font-black text-white text-lg tracking-tight">PartnerVest</span>
         </div>
         <button onClick={handleLogout} className="text-[9px] font-black text-rose-500/70 uppercase px-3 py-1.5 bg-white/5 rounded-full border border-white/10">Esci</button>
       </header>
 
-      {/* MAIN CONTENT RESPONSIVE */}
+      {/* MAIN CONTENT */}
       <main className="flex-1 h-screen overflow-y-auto p-4 sm:p-8 lg:p-10 pb-32 bg-[#020617] hide-scrollbar relative z-10">
         <div key={animKey} className="max-w-5xl mx-auto">
           
@@ -484,8 +476,6 @@ export default function Dashboard() {
                     <div className="mb-6"><p className="text-[9px] uppercase font-black text-slate-500 mb-1">Payout Affiliato</p><p className="font-black font-mono text-emerald-400 text-3xl tracking-tight">€{offer.partner_payout?.toFixed(2)}</p></div>
                     <div className="mt-auto flex gap-2 pt-2">
                       <button onClick={() => {setSelectedOffer(offer); setIsSiteModalOpen(true);}} className="flex-1 text-[9px] font-black text-slate-300 bg-white/5 py-3.5 rounded-xl hover:bg-white/10 uppercase tracking-widest transition-all">Hub</button>
-                      
-                      {/* TASTO COPIA COL NUOVO DOMINIO */}
                       <button onClick={(e) => handleGetLink(offer, e)} className="flex-[2] text-[9px] font-black uppercase text-white bg-blue-600 hover:bg-blue-500 py-3.5 rounded-xl transition-all shadow-[0_4px_12px_rgba(37,99,235,0.2)] active:scale-95">Copia Link S2S</button>
                     </div>
                   </div>
@@ -494,7 +484,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* TAB 3 & 4 (Semplificati ma coerenti col design originale) */}
+          {/* TAB 3 & 4 (Assets e KYC) */}
           {activeTab === 'assets' && (
              <div className="space-y-6 max-w-3xl">
                 <div className="pb-4 border-b border-white/5 stagger-1"><h1 className="text-3xl font-black text-white tracking-tight">Infrastruttura</h1></div>
@@ -520,7 +510,7 @@ export default function Dashboard() {
         </div>
       </main>
 
-      {/* BOTTOM NAV MOBILE ORIGINALE */}
+      {/* BOTTOM NAV MOBILE */}
       <div className="md:hidden fixed bottom-4 left-4 right-4 z-50 flex justify-center">
         <nav className="bg-[#0B1221]/95 backdrop-blur-xl w-full rounded-[1.5rem] border border-white/10 p-1.5 flex justify-around shadow-2xl">
           {[ {id: 'overview', icon: '📊', label: 'Home'}, {id: 'marketplace', icon: '🏦', label: 'Offerte'}, {id: 'assets', icon: '🖥️', label: 'Hub IT'}, {id: 'kyc', icon: '🛡️', label: 'Dati'} ].map((tab) => (
@@ -531,7 +521,7 @@ export default function Dashboard() {
         </nav>
       </div>
 
-      {/* MODALI ORIGINALI (GLASSMORPHISM) */}
+      {/* MODALI (GLASSMORPHISM) */}
       {isSiteModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-[slideUpFade_0.3s_ease-out_forwards]" onClick={() => setIsSiteModalOpen(false)}>
           <div className="bg-[#0B1221] border border-white/10 p-8 rounded-3xl max-w-md w-full shadow-2xl relative" onClick={e => e.stopPropagation()}>
