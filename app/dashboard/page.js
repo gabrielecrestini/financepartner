@@ -43,8 +43,8 @@ export default function Dashboard() {
   const [securityLock, setSecurityLock] = useState(false);
   const [detectedIp, setDetectedIp] = useState('');
   
-  // Form State
-  const [billing, setBilling] = useState({ full_name: '', entity_type: 'privato', vat_number: '', tax_id: '', address: '', payment_info: '', registered_website: '', traffic_volume: '' });
+  // Form State (Aggiornato per KYC)
+  const [billing, setBilling] = useState({ full_name: '', has_vat: false, vat_number: '', tax_id: '', address: '', payment_info: '', registered_website: '', traffic_volume: '' });
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState({ text: '', type: '' });
   
@@ -78,7 +78,18 @@ export default function Dashboard() {
     setProfile(profileData);
     
     if (profileData?.traffic_status === 'approved') {
-      setBilling({ full_name: profileData.full_name || '', entity_type: profileData.entity_type || 'privato', vat_number: profileData.vat_number || '', tax_id: profileData.tax_id || '', address: profileData.address || '', payment_info: profileData.payment_info || '', registered_website: profileData.registered_website || '', traffic_volume: profileData.traffic_volume || '' });
+      // Mappatura entity_type per compatibilità con vecchi account, convertiamo a has_vat
+      const hasVat = profileData.entity_type === 'azienda' || (profileData.vat_number && profileData.vat_number.trim() !== '');
+      setBilling({ 
+        full_name: profileData.full_name || '', 
+        has_vat: hasVat, 
+        vat_number: profileData.vat_number || '', 
+        tax_id: profileData.tax_id || '', 
+        address: profileData.address || '', 
+        payment_info: profileData.payment_info || '', 
+        registered_website: profileData.registered_website || '', 
+        traffic_volume: profileData.traffic_volume || '' 
+      });
 
       const [{ data: notifs }, { data: offersData }, { data: convData }, { data: clickData }] = await Promise.all([
         supabase.from('notifications').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }),
@@ -196,9 +207,6 @@ export default function Dashboard() {
     if (!error) setProfile({...profile, traffic_status: 'pending'});
   };
 
-  // =======================================================================
-  // FUNZIONE COPIA LINK S2S - AGGIORNATA AL BRAND PARTNERVEST
-  // =======================================================================
   const handleGetLink = (offer, e) => {
     if (e) e.stopPropagation();
     
@@ -206,7 +214,6 @@ export default function Dashboard() {
       return showToast("⚠️ Sorgente in Audit. Attendi approvazione tecnica.", "error");
     }
     
-    // NUOVO DOMINIO
     const baseUrl = "https://partnervest.net";
     const trackingLink = `${baseUrl}/api/click?offer_id=${offer.id}&subid=${user.id}`;
     
@@ -252,7 +259,18 @@ export default function Dashboard() {
 
   const handleSaveSettings = async () => {
     setSavingSettings(true);
-    const { error } = await supabase.from('profiles').update({...billing, payment_info: billing.payment_info.replace(/\s+/g, '').toUpperCase()}).eq('id', user.id);
+    // Convertiamo has_vat di nuovo in entity_type per mantenere la compatibilità col DB se necessario
+    const entityType = billing.has_vat ? 'azienda' : 'privato';
+    const vatNumberToSave = billing.has_vat ? billing.vat_number : '';
+
+    const { error } = await supabase.from('profiles').update({
+        full_name: billing.full_name,
+        entity_type: entityType,
+        vat_number: vatNumberToSave,
+        tax_id: billing.tax_id.toUpperCase(),
+        payment_info: billing.payment_info.replace(/\s+/g, '').toUpperCase()
+    }).eq('id', user.id);
+    
     setSavingSettings(false);
     if (!error) { showToast('Dati crittografati e sincronizzati.', 'success'); setProfile({...profile, ...billing}); }
   };
@@ -271,9 +289,6 @@ export default function Dashboard() {
   if (!isMounted) return null;
   if (loading) return <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center"><div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>;
 
-  // =======================================================================
-  // DESIGN: DEVICE AUTHORIZATION
-  // =======================================================================
   if (securityLock) {
     return (
       <div className="min-h-screen bg-[#02040A] text-white flex items-center justify-center p-4 relative overflow-hidden">
@@ -292,9 +307,6 @@ export default function Dashboard() {
     );
   }
 
-  // =======================================================================
-  // DESIGN: GATEKEEPER
-  // =======================================================================
   if (profile && profile.traffic_status !== 'approved') {
     return (
       <div className="min-h-screen bg-[#020617] text-white flex items-center justify-center p-4 relative overflow-hidden">
@@ -324,9 +336,6 @@ export default function Dashboard() {
     );
   }
 
-  // =======================================================================
-  // CHART COMPONENT
-  // =======================================================================
   const maxClicks = Math.max(...chartData.map(d => d.clicks), 1);
   const ChartComponent = () => (
     <div className="bg-slate-900/20 backdrop-blur-md p-6 sm:p-8 rounded-[1.2rem] border border-white/5 mt-6 stagger-3 relative overflow-hidden">
@@ -355,7 +364,6 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-[#020617] text-slate-300 font-sans flex flex-col md:flex-row relative selection:bg-blue-500/30">
       
-      {/* CSS ORIGINALE PREMIUM & RESPONSIVE */}
       <style dangerouslySetInnerHTML={{__html: `
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
         body { font-family: 'Inter', sans-serif; }
@@ -378,14 +386,12 @@ export default function Dashboard() {
 
       <div className="fixed inset-0 z-0 bg-[radial-gradient(rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
 
-      {/* TOAST */}
       {settingsMsg.text && (
         <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[110] px-5 py-3 rounded-full text-[9px] font-black uppercase tracking-widest shadow-2xl border backdrop-blur-xl animate-[slideUpFade_0.3s_ease-out_forwards] ${settingsMsg.type === 'error' ? 'bg-rose-950/90 text-rose-200 border-rose-500/50' : 'bg-slate-900/90 text-blue-300 border-blue-500/50'}`}>
           {settingsMsg.text}
         </div>
       )}
 
-      {/* SIDEBAR DESKTOP */}
       <aside className="hidden md:flex flex-col w-64 h-screen border-r border-white/5 bg-[#020617] p-6 shrink-0 relative z-40">
         <div className="flex items-center gap-3 mb-8">
           <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center font-black text-white text-lg shadow-[0_0_15px_rgba(37,99,235,0.3)]">P</div>
@@ -404,7 +410,6 @@ export default function Dashboard() {
         </div>
       </aside>
 
-      {/* HEADER MOBILE */}
       <header className="md:hidden flex items-center justify-between p-4 border-b border-white/5 bg-[#020617] sticky top-0 z-40 backdrop-blur-md">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center font-black text-white text-sm">P</div>
@@ -413,11 +418,9 @@ export default function Dashboard() {
         <button onClick={handleLogout} className="text-[9px] font-black text-rose-500/70 uppercase px-3 py-1.5 bg-white/5 rounded-full border border-white/10">Esci</button>
       </header>
 
-      {/* MAIN CONTENT */}
       <main className="flex-1 h-screen overflow-y-auto p-4 sm:p-8 lg:p-10 pb-32 bg-[#020617] hide-scrollbar relative z-10">
         <div key={animKey} className="max-w-5xl mx-auto">
           
-          {/* TAB 1: OVERVIEW */}
           {activeTab === 'overview' && (
             <div className="space-y-6">
               <div className="flex justify-between items-end pb-4 border-b border-white/5 stagger-1">
@@ -456,7 +459,6 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* TAB 2: MARKETPLACE */}
           {activeTab === 'marketplace' && (
             <div className="space-y-6">
               <div className="pb-4 border-b border-white/5 stagger-1"><h1 className="text-3xl font-black text-white tracking-tight mb-2">Marketplace B2B</h1><p className="text-xs text-slate-400 leading-relaxed">Inventario offerte dirette con Payout Netti S2S (Zero Fee).</p></div>
@@ -484,7 +486,6 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* TAB 3 & 4 (Assets e KYC) */}
           {activeTab === 'assets' && (
              <div className="space-y-6 max-w-3xl">
                 <div className="pb-4 border-b border-white/5 stagger-1"><h1 className="text-3xl font-black text-white tracking-tight">Infrastruttura</h1></div>
@@ -495,14 +496,65 @@ export default function Dashboard() {
              </div>
           )}
 
+          {/* TAB KYC AGGIORNATO */}
           {activeTab === 'kyc' && (
              <div className="space-y-6 max-w-3xl">
-                <div className="pb-4 border-b border-white/5 stagger-1"><h1 className="text-3xl font-black text-white tracking-tight">Dati & KYC</h1><p className="text-xs text-slate-400">Coordinate criptate per erogazione pagamenti.</p></div>
+                <div className="pb-4 border-b border-white/5 stagger-1">
+                  <h1 className="text-3xl font-black text-white tracking-tight">Dati & KYC</h1>
+                  <p className="text-xs text-slate-400">Coordinate criptate per erogazione pagamenti (Requisiti FinanceAds).</p>
+                </div>
                 <div className="bg-slate-900/20 border border-white/5 p-6 sm:p-8 rounded-[1.5rem] stagger-2">
-                   <div className="space-y-5">
-                      <div><label className="block text-[9px] font-black text-slate-500 uppercase mb-2">Intestatario SEPA</label><input type="text" value={billing.full_name} onChange={e => setBilling({...billing, full_name: e.target.value})} className="w-full bg-black/30 border border-white/5 p-4 rounded-xl outline-none focus:border-white/10 text-white transition-all" /></div>
-                      <div><label className="block text-[9px] font-black text-emerald-500 uppercase mb-2 tracking-widest">🔒 IBAN (SEPA Direct)</label><input type="text" value={billing.payment_info} onChange={e => setBilling({...billing, payment_info: e.target.value.toUpperCase()})} className="w-full bg-emerald-500/5 border border-emerald-500/20 p-4 rounded-xl text-emerald-400 font-mono text-lg focus:border-emerald-500/40" placeholder="IT00..." /></div>
-                      <button onClick={handleSaveSettings} disabled={savingSettings} className="w-full bg-emerald-600 text-white font-black text-[11px] py-4 rounded-xl uppercase tracking-widest mt-4 transition-all hover:bg-emerald-500 disabled:opacity-50">{savingSettings ? 'Sync...' : 'Sincronizza Criptando'}</button>
+                   <div className="space-y-6">
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                         {/* Intestatario */}
+                         <div className="sm:col-span-2">
+                            <label className="block text-[9px] font-black text-slate-500 uppercase mb-2">Intestatario Pagamento (Nome Completo o Ragione Sociale)</label>
+                            <input type="text" value={billing.full_name} onChange={e => setBilling({...billing, full_name: e.target.value})} className="w-full bg-black/30 border border-white/5 p-4 rounded-xl outline-none focus:border-white/10 text-white transition-all" placeholder="Es. Mario Rossi" />
+                         </div>
+
+                         {/* Codice Fiscale (Sempre Obbligatorio) */}
+                         <div className="sm:col-span-2">
+                            <label className="block text-[9px] font-black text-slate-500 uppercase mb-2">Codice Fiscale (Obbligatorio)</label>
+                            <input type="text" value={billing.tax_id} onChange={e => setBilling({...billing, tax_id: e.target.value.toUpperCase()})} className="w-full bg-black/30 border border-white/5 p-4 rounded-xl outline-none focus:border-white/10 text-white transition-all uppercase font-mono" placeholder="RSSMRA..." maxLength={16} />
+                         </div>
+
+                         {/* Toggle Partita IVA */}
+                         <div className="sm:col-span-2">
+                            <label className="block text-[9px] font-black text-slate-500 uppercase mb-2">Sei in possesso di Partita IVA?</label>
+                            <div className="flex gap-4">
+                               <button 
+                                 onClick={() => setBilling({...billing, has_vat: false, vat_number: ''})} 
+                                 className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!billing.has_vat ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
+                               >
+                                 No (Privato)
+                               </button>
+                               <button 
+                                 onClick={() => setBilling({...billing, has_vat: true})} 
+                                 className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${billing.has_vat ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
+                               >
+                                 Sì (Azienda/P.IVA)
+                               </button>
+                            </div>
+                         </div>
+
+                         {/* Campo P.IVA (Condizionale) */}
+                         {billing.has_vat && (
+                            <div className="sm:col-span-2 animate-[slideUpFade_0.2s_ease-out]">
+                               <label className="block text-[9px] font-black text-slate-500 uppercase mb-2">Numero Partita IVA</label>
+                               <input type="text" value={billing.vat_number} onChange={e => setBilling({...billing, vat_number: e.target.value})} className="w-full bg-black/30 border border-white/5 p-4 rounded-xl outline-none focus:border-white/10 text-white transition-all font-mono" placeholder="IT01234..." />
+                            </div>
+                         )}
+                      </div>
+
+                      <div className="pt-4 border-t border-white/5">
+                         <label className="block text-[9px] font-black text-emerald-500 uppercase mb-2 tracking-widest">🔒 IBAN (SEPA Direct)</label>
+                         <input type="text" value={billing.payment_info} onChange={e => setBilling({...billing, payment_info: e.target.value.toUpperCase()})} className="w-full bg-emerald-500/5 border border-emerald-500/20 p-4 rounded-xl text-emerald-400 font-mono text-lg focus:border-emerald-500/40" placeholder="IT00..." />
+                      </div>
+                      
+                      <button onClick={handleSaveSettings} disabled={savingSettings} className="w-full bg-emerald-600 text-white font-black text-[11px] py-4 rounded-xl uppercase tracking-widest mt-2 transition-all hover:bg-emerald-500 disabled:opacity-50">
+                        {savingSettings ? 'Sincronizzazione in corso...' : 'Salva e Sincronizza Criptando'}
+                      </button>
                    </div>
                 </div>
              </div>
@@ -510,7 +562,6 @@ export default function Dashboard() {
         </div>
       </main>
 
-      {/* BOTTOM NAV MOBILE */}
       <div className="md:hidden fixed bottom-4 left-4 right-4 z-50 flex justify-center">
         <nav className="bg-[#0B1221]/95 backdrop-blur-xl w-full rounded-[1.5rem] border border-white/10 p-1.5 flex justify-around shadow-2xl">
           {[ {id: 'overview', icon: '📊', label: 'Home'}, {id: 'marketplace', icon: '🏦', label: 'Offerte'}, {id: 'assets', icon: '🖥️', label: 'Hub IT'}, {id: 'kyc', icon: '🛡️', label: 'Dati'} ].map((tab) => (
@@ -521,7 +572,6 @@ export default function Dashboard() {
         </nav>
       </div>
 
-      {/* MODALI (GLASSMORPHISM) */}
       {isSiteModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-[slideUpFade_0.3s_ease-out_forwards]" onClick={() => setIsSiteModalOpen(false)}>
           <div className="bg-[#0B1221] border border-white/10 p-8 rounded-3xl max-w-md w-full shadow-2xl relative" onClick={e => e.stopPropagation()}>
