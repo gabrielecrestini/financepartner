@@ -1,14 +1,25 @@
 "use client";
 
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, ReactNode } from 'react';
+
+// =======================================================================
+// TIPI TYPESCRIPT PER IL MOTORE DI ANIMAZIONE (Evita l'errore di Netlify)
+// =======================================================================
+interface RevealOnScrollProps {
+  children: ReactNode;
+  className?: string;
+  delay?: number;
+  threshold?: number;
+  id?: string;
+}
 
 // =======================================================================
 // MOTORE DI ANIMAZIONE ALLO SCORRIMENTO (Scroll Reveal Engine)
 // =======================================================================
-const RevealOnScroll = ({ children, className = "", delay = 0, threshold = 0.1, id }) => {
+const RevealOnScroll = ({ children, className = "", delay = 0, threshold = 0.1, id }: RevealOnScrollProps) => {
   const [isVisible, setIsVisible] = useState(false);
-  const ref = useRef(null);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -193,7 +204,7 @@ export default function Home() {
                 <div className="bento-glow"></div>
                 <h3 className="text-5xl sm:text-6xl font-black text-emerald-400 mb-2 font-mono tracking-tighter">100%</h3>
                 <h4 className="text-base sm:text-lg font-black text-white mb-2">Payout Netto</h4>
-                <p className="text-xs sm:text-sm text-slate-400">Zero commissioni nascoste. L'esatto ammontare che la banca liquida, arriva a te.</p>
+                <p className="text-xs sm:text-sm text-slate-400">Zero commissioni nascoste. Quello che la banca paga, tu lo ricevi.</p>
               </div>
             </RevealOnScroll>
 
