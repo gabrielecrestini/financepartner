@@ -2,236 +2,285 @@
 
 import { useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
-export default function SignUp() {
-  // 1. Credenziali
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  
-  // 2. Dati Fiscali / KYC
-  const [entityType, setEntityType] = useState('privato');
-  const [fullName, setFullName] = useState('');
-  const [taxId, setTaxId] = useState('');
-  const [vatNumber, setVatNumber] = useState('');
-  const [address, setAddress] = useState('');
-
-  // 3. Traffico e Infrastruttura
-  const [hasWebsite, setHasWebsite] = useState(true);
-  const [url, setUrl] = useState('');
-  const [strategy, setStrategy] = useState('');
-  
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [status, setStatus] = useState('idle');
-  const [errorMessage, setErrorMessage] = useState('');
+export default function Signup() {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState(false);
 
-  const handleSignUp = async (e) => {
+  // Form State Avanzato
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    fullName: '',
+    taxId: '', // Codice Fiscale
+    hasVat: false,
+    vatNumber: '',
+    paymentInfo: '', // IBAN
+    needsWebsite: true, // Vuole il sito da noi?
+    existingWebsite: '', // Se ha già un sito
+    adSpend: '', // Budget Ads
+    expectedTraffic: '' // Traffico Stimato
+  });
+
+  const handleSignup = async (e) => {
     e.preventDefault();
-    
-    if (!acceptedTerms) {
-      setErrorMessage('Devi accettare i Termini e Condizioni per accedere al Network.');
-      setStatus('error'); setTimeout(() => setStatus('idle'), 4000); return;
-    }
-
-    if (password.length < 6) {
-      setErrorMessage('La password deve avere almeno 6 caratteri.');
-      setStatus('error'); setTimeout(() => setStatus('idle'), 4000); return;
-    }
-
-    setStatus('loading');
-    setErrorMessage('');
+    setLoading(true);
+    setErrorMsg('');
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
+      // 1. Registrazione su Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+      });
 
-      if (authError) {
-        setErrorMessage(`ERRORE AUTH: ${authError.message}`);
-        setStatus('error'); setTimeout(() => setStatus('idle'), 8000); return; 
-      }
+      if (authError) throw authError;
 
-      if (authData?.user) {
-        let cleanUrl = url.trim();
-        if (cleanUrl && !cleanUrl.startsWith('http')) cleanUrl = `https://${cleanUrl}`;
+      // 2. Formattazione Dati per il Profilo
+      if (authData.user) {
+        const entityType = formData.hasVat ? 'azienda' : 'privato';
+        const formattedIban = formData.paymentInfo.replace(/\s+/g, '').toUpperCase();
+        const registeredWeb = formData.needsWebsite ? 'Richiesto Hub IT PartnerVest' : formData.existingWebsite;
         
-        // Costruiamo il briefing per l'Admin
-        const adminBriefing = `CANDIDATURA NUOVA:\nModello: ${hasWebsite ? 'Sito Proprietario' : 'Richiesta Hub Gestito'}\nSorgente: ${hasWebsite ? cleanUrl : 'Da definire tramite Hub'}\nStrategia Operativa: ${strategy}`;
+        // Assembliamo un briefing pulito per te (Admin)
+        const trafficBriefing = `BUDGET ADS MENSILE: ${formData.adSpend} | TRAFFICO STIMATO: ${formData.expectedTraffic} | SITO: ${formData.needsWebsite ? 'Richiede Sviluppo Hub' : 'Sito Proprietario'}`;
 
-        // Salviamo tutto: Credenziali, KYC e Traffico in un colpo solo
-        const { error: profileError } = await supabase.from('profiles').upsert({
-          id: authData.user.id,
-          email: email,
-          // Dati KYC
+        const profileData = {
+          full_name: formData.fullName,
+          tax_id: formData.taxId.toUpperCase(),
           entity_type: entityType,
-          full_name: fullName,
-          tax_id: taxId.toUpperCase(),
-          vat_number: entityType === 'azienda' ? vatNumber : null,
-          address: address,
-          kyc_status: 'pending', // Mette subito il KYC in attesa di tua approvazione
-          // Dati Traffico
-          registered_website: hasWebsite ? cleanUrl : 'Richiesta Hub',
-          traffic_volume: strategy,
-          traffic_notes: adminBriefing,
-          traffic_status: 'pending' // Mette subito il traffico in attesa
-        });
+          vat_number: formData.hasVat ? formData.vatNumber : '',
+          payment_info: formattedIban, // IBAN salvato
+          registered_website: registeredWeb, // Sito salvato
+          traffic_volume: formData.expectedTraffic, // Traffico salvato
+          traffic_status: 'pending', // Stato in attesa
+          traffic_notes: trafficBriefing // Note strategiche per admin
+        };
+
+        // Aggiorniamo il profilo generato dal trigger o lo inseriamo
+        const { error: profileError } = await supabase.from('profiles').update(profileData).eq('id', authData.user.id);
 
         if (profileError) {
-          setErrorMessage(`ERRORE DATABASE: ${profileError.message}`);
-          setStatus('error'); setTimeout(() => setStatus('idle'), 10000); return; 
+          await supabase.from('profiles').insert({ id: authData.user.id, ...profileData });
         }
+
+        setSuccessMsg(true);
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 3000);
       }
-      
-      // Entrata istantanea nella Sala d'Attesa della Dashboard
-      router.push('/dashboard');
-      
-    } catch (err) {
-      setErrorMessage(`ERRORE DI RETE: ${err.message}`);
-      setStatus('error'); setTimeout(() => setStatus('idle'), 8000); 
+    } catch (error) {
+      setErrorMsg(error.message || 'Errore durante la registrazione. Controlla i dati e riprova.');
+    } finally {
+      setLoading(false);
     }
   };
 
+  if (successMsg) {
+    return (
+      <div className="min-h-screen bg-[#000000] flex items-center justify-center p-4">
+        <div className="bg-[#0B1221] border border-blue-500/30 p-10 rounded-[2rem] max-w-md w-full text-center shadow-[0_0_50px_rgba(59,130,246,0.15)] animate-[slideUpFade_0.5s_ease-out_forwards]">
+          <div className="w-20 h-20 bg-blue-500/10 border border-blue-500/30 rounded-full flex items-center justify-center text-4xl mx-auto mb-6">✅</div>
+          <h2 className="text-2xl font-black text-white mb-2">Audit Inviato.</h2>
+          <p className="text-slate-400 text-sm mb-6">I tuoi dati sono stati crittografati e inviati al team Compliance. Reindirizzamento al Terminale...</p>
+          <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#02040A] text-slate-300 font-sans flex flex-col items-center justify-center p-4 sm:p-8 relative overflow-hidden selection:bg-blue-500/30">
+    <main className="min-h-screen bg-[#000000] text-slate-300 font-sans selection:bg-blue-500/30 overflow-x-hidden flex flex-col lg:flex-row w-full">
+      
+      {/* STILI E ANIMAZIONI */}
       <style dangerouslySetInnerHTML={{__html: `
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(30px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
-        .glass-panel { background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(30px); border: 1px solid rgba(255, 255, 255, 0.05); box-shadow: 0 40px 80px rgba(0,0,0,0.8); border-radius: 2rem; animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        .input-premium { background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.08); color: white; padding: 16px 20px; border-radius: 1rem; width: 100%; outline: none; transition: all 0.3s ease; font-size: 0.9rem; font-weight: 500; }
-        .input-premium:focus { border-color: #3B82F6; background: rgba(0, 0, 0, 0.7); box-shadow: inset 0 0 0 1px #3B82F6, 0 0 20px rgba(59,130,246,0.15); }
-        .custom-checkbox { appearance: none; background-color: rgba(0,0,0,0.5); margin: 0; font: inherit; color: currentColor; width: 22px; height: 22px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; display: grid; place-content: center; cursor: pointer; transition: all 0.2s ease; flex-shrink: 0; }
-        .custom-checkbox::before { content: ""; width: 12px; height: 12px; transform: scale(0); transition: 120ms transform ease-in-out; box-shadow: inset 1em 1em white; transform-origin: center; clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%); }
-        .custom-checkbox:checked { background-color: #3B82F6; border-color: #3B82F6; box-shadow: 0 0 15px rgba(59,130,246,0.5); }
-        .custom-checkbox:checked::before { transform: scale(1); }
-        .bg-grid { background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px); background-size: 40px 40px; }
-        .tab-button { flex: 1; padding: 12px; text-align: center; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; border-radius: 12px; transition: all 0.3s ease; border: 1px solid transparent; }
-        .tab-button.active { background: white; color: black; box-shadow: 0 4px 15px rgba(255,255,255,0.2); }
-        .tab-button:not(.active) { color: #64748b; background: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.05); }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #000000; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        @keyframes slideRight { from { opacity: 0; transform: translateX(-30px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes slideLeft { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+        
+        .animate-slide-right { animation: slideRight 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .animate-slide-left { animation: slideLeft 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        
+        /* Input Premium */
+        .input-premium { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.08); padding: 1.2rem 1rem; border-radius: 0.75rem; color: white; width: 100%; transition: all 0.3s ease; outline: none; font-size: 0.875rem; }
+        .input-premium:focus { border-color: rgba(59,130,246,0.6); box-shadow: 0 0 20px rgba(59,130,246,0.15); background: rgba(0,0,0,0.6); }
+        .input-premium::placeholder { color: rgba(255,255,255,0.3); }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
       `}} />
 
-      <div className="absolute inset-0 z-0 bg-grid opacity-50 pointer-events-none"></div>
-      <div className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[150px] pointer-events-none"></div>
+      {/* PANNELLO SINISTRO (Info Contrattuali e Value Prop) */}
+      <div className="w-full lg:w-5/12 p-6 sm:p-12 lg:p-16 flex flex-col justify-center relative border-b lg:border-b-0 lg:border-r border-white/5 bg-[#02040A] z-10 animate-slide-right min-h-[40vh] lg:min-h-screen lg:fixed lg:left-0 lg:top-0 lg:bottom-0">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-blue-900/20 via-transparent to-transparent pointer-events-none"></div>
+        
+        <Link href="/" className="inline-flex items-center gap-3 mb-10 group w-fit relative z-10">
+          <div className="w-8 h-8 bg-white/5 border border-white/10 rounded flex items-center justify-center font-black text-white text-xs group-hover:bg-blue-600 transition-colors">←</div>
+          <span className="font-black text-white tracking-widest text-[10px] uppercase">Torna alla Home</span>
+        </Link>
 
-      <Link href="/" className="absolute top-6 left-6 z-50 text-[10px] font-black text-slate-500 uppercase tracking-widest hover:text-white transition-colors bg-white/5 hover:bg-white/10 px-5 py-2.5 rounded-full border border-white/10 backdrop-blur-md flex items-center gap-2">
-        <span className="text-sm">←</span> Ritorna
-      </Link>
-
-      <div className="w-full max-w-3xl z-10 pt-16 pb-8">
-        <div className="flex justify-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-[1.2rem] flex items-center justify-center font-black text-white text-3xl shadow-[0_0_30px_rgba(59,130,246,0.5)] border border-white/10">F</div>
-        </div>
-
-        <div className="glass-panel p-6 sm:p-12 relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-blue-600 to-indigo-500 shadow-[0_0_20px_rgba(59,130,246,0.8)]"></div>
+        <div className="relative z-10 max-w-lg">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[9px] font-black uppercase tracking-widest mb-6">
+            <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse"></span> Onboarding B2B
+          </div>
           
-          <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight mb-2 text-center">Onboarding Affiliato</h2>
-          <p className="text-sm text-slate-400 text-center font-medium mb-10">Completa il profilo fiscale e operativo per accedere al network B2B.</p>
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight mb-6 leading-tight">
+            Compliance e <br />Trasparenza Fiscale.
+          </h1>
+          <p className="text-sm text-slate-400 mb-10 leading-relaxed">
+            PartnerVest opera nel rigoroso rispetto delle normative. Scegli l'inquadramento adatto a te: i tuoi dati bancari saranno criptati e pronti per l'erogazione delle commissioni S2S.
+          </p>
 
-          <form onSubmit={handleSignUp} className="space-y-8">
+          <div className="space-y-4">
+            {/* Contratto Occasionale */}
+            <div className="bg-black/50 border border-white/5 p-5 sm:p-6 rounded-2xl relative overflow-hidden group hover:border-amber-500/30 transition-colors">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-colors"></div>
+              <div className="flex items-start gap-4 relative z-10">
+                <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-lg shrink-0">📄</div>
+                <div>
+                  <h3 className="font-black text-white mb-1 tracking-tight">Privati (Senza P.IVA)</h3>
+                  <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-2">Prestazione Occasionale</p>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Gestiamo noi la burocrazia applicando la <strong>ritenuta d'acconto del 20%</strong> sui compensi (max 5.000€ netti annui). Le tasse vengono versate automaticamente per te allo Stato.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Contratto Aziendale */}
+            <div className="bg-blue-950/10 border border-blue-500/20 p-5 sm:p-6 rounded-2xl relative overflow-hidden group hover:border-blue-500/50 transition-colors">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl group-hover:bg-blue-500/20 transition-colors"></div>
+              <div className="flex items-start gap-4 relative z-10">
+                <div className="w-10 h-10 bg-blue-500/20 border border-blue-500/40 rounded-xl flex items-center justify-center text-lg shrink-0">🏢</div>
+                <div>
+                  <h3 className="font-black text-white mb-1 tracking-tight">Aziende (Con P.IVA)</h3>
+                  <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-2">Nessun Limite</p>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Accredito rapido del 100% del Payout tramite Bonifico SEPA a fronte della tua emissione di fattura elettronica. Il setup per chi vuole scalare i volumi.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* PANNELLO DESTRO (Form di Registrazione) */}
+      <div className="w-full lg:w-7/12 p-4 sm:p-8 lg:p-12 xl:p-16 flex flex-col justify-start lg:ml-[41.666667%] relative min-h-screen animate-slide-left">
+        <div className="absolute inset-0 bg-grid-fine opacity-30 pointer-events-none" style={{ maskImage: 'radial-gradient(circle_at_center, black 0%, transparent 80%)', WebkitMaskImage: 'radial-gradient(circle_at_center, black 0%, transparent 80%)' }}></div>
+        
+        <div className="w-full max-w-[500px] mx-auto relative z-10 my-auto py-10">
+          <div className="mb-8">
+            <h2 className="text-2xl sm:text-3xl font-black text-white mb-2 tracking-tight">Application Form</h2>
+            <p className="text-sm text-slate-400">Inserisci i dati con precisione per l'audit tecnico e fiscale.</p>
+          </div>
+
+          {errorMsg && (
+            <div className="bg-rose-950/50 border border-rose-500/50 text-rose-200 text-xs p-4 rounded-xl mb-6 font-medium">
+              {errorMsg}
+            </div>
+          )}
+
+          <form onSubmit={handleSignup} className="space-y-6">
             
-            {/* SEZIONE 1: CREDENZIALI */}
-            <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/5 space-y-5">
-              <h3 className="text-[11px] font-black text-blue-400 uppercase tracking-widest border-b border-white/5 pb-3">1. Credenziali di Accesso</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Email Operativa</label>
-                  <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="input-premium font-mono text-blue-200" placeholder="nome@azienda.com" disabled={status === 'loading'} />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Password Sicura</label>
-                  <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="input-premium font-mono text-blue-200 tracking-widest" placeholder="Min. 6 caratteri" disabled={status === 'loading'} />
-                </div>
+            {/* 1. Credenziali di Accesso */}
+            <div className="space-y-4 bg-white/[0.02] p-6 rounded-2xl border border-white/5 shadow-lg">
+              <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5 pb-3">1. Credenziali Terminale</h4>
+              <div className="grid grid-cols-1 gap-4">
+                <input type="email" required placeholder="Email Operativa" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="input-premium" />
+                <input type="password" required placeholder="Password Criptata (min. 6 car.)" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} className="input-premium" minLength={6} />
               </div>
             </div>
 
-            {/* SEZIONE 2: DATI FISCALI KYC */}
-            <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/5 space-y-5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-4">
-                <h3 className="text-[11px] font-black text-blue-400 uppercase tracking-widest">2. Profilo Fiscale (KYC)</h3>
-                <div className="flex p-1 bg-black/40 rounded-xl w-max border border-white/5">
-                  <button type="button" onClick={() => setEntityType('privato')} className={`px-6 py-2 text-[9px] font-black rounded-lg uppercase tracking-widest transition-all ${entityType === 'privato' ? 'bg-white text-black' : 'text-slate-500 hover:text-white'}`}>Privato</button>
-                  <button type="button" onClick={() => setEntityType('azienda')} className={`px-6 py-2 text-[9px] font-black rounded-lg uppercase tracking-widest transition-all ${entityType === 'azienda' ? 'bg-white text-black' : 'text-slate-500 hover:text-white'}`}>P.IVA</button>
+            {/* 2. Dati KYC e Bancari */}
+            <div className="space-y-4 bg-white/[0.02] p-6 rounded-2xl border border-white/5 shadow-lg">
+              <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5 pb-3">2. KYC & Erogazione Pagamenti</h4>
+              <div className="grid grid-cols-1 gap-4">
+                <input type="text" required placeholder="Nome e Cognome (Intestatario Conti)" value={formData.fullName} onChange={(e) => setFormData({...formData, fullName: e.target.value})} className="input-premium" />
+                <input type="text" required placeholder="Codice Fiscale (Obbligatorio)" value={formData.taxId} onChange={(e) => setFormData({...formData, taxId: e.target.value.toUpperCase()})} className="input-premium uppercase font-mono" maxLength={16} />
+                
+                {/* IBAN Evidenziato */}
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                    <span className="text-emerald-500 text-lg">🏦</span>
+                  </div>
+                  <input type="text" required placeholder="IBAN per accredito SEPA (es. IT00...)" value={formData.paymentInfo} onChange={(e) => setFormData({...formData, paymentInfo: e.target.value.toUpperCase()})} className="input-premium pl-12 uppercase font-mono border-emerald-500/30 focus:border-emerald-500/60 bg-emerald-950/10" />
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <div className="sm:col-span-2">
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Intestatario / Ragione Sociale</label>
-                  <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} className="input-premium" disabled={status === 'loading'} />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Codice Fiscale</label>
-                  <input type="text" required value={taxId} onChange={(e) => setTaxId(e.target.value)} className="input-premium uppercase font-mono" disabled={status === 'loading'} />
-                </div>
-                {entityType === 'azienda' && (
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Partita IVA</label>
-                    <input type="text" required value={vatNumber} onChange={(e) => setVatNumber(e.target.value)} className="input-premium font-mono" disabled={status === 'loading'} />
-                  </div>
-                )}
-                <div className={entityType === 'privato' ? "sm:col-span-2" : "sm:col-span-2"}>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Indirizzo di Residenza / Sede Legale</label>
-                  <input type="text" required value={address} onChange={(e) => setAddress(e.target.value)} className="input-premium" disabled={status === 'loading'} placeholder="Via, Numero, CAP, Città" />
+              <div className="pt-2">
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Possiedi una Partita IVA?</label>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button type="button" onClick={() => setFormData({...formData, hasVat: false, vatNumber: ''})} className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!formData.hasVat ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-black border border-white/10 text-slate-500'}`}>
+                    No (Occasionale)
+                  </button>
+                  <button type="button" onClick={() => setFormData({...formData, hasVat: true})} className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${formData.hasVat ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-black border border-white/10 text-slate-500'}`}>
+                    Sì (Azienda/Prof.)
+                  </button>
                 </div>
               </div>
-              <p className="text-[9px] text-slate-500 font-mono mt-2">I dati sono crittografati e necessari esclusivamente per l'emissione dei bonifici SEPA a norma di legge.</p>
-            </div>
 
-            {/* SEZIONE 3: INFRASTRUTTURA */}
-            <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/5 space-y-6">
-              <h3 className="text-[11px] font-black text-blue-400 uppercase tracking-widest border-b border-white/5 pb-3">3. Infrastruttura di Rete</h3>
-              
-              <div className="flex p-1 bg-black/40 rounded-[14px] border border-white/5">
-                <button type="button" onClick={() => setHasWebsite(true)} className={`tab-button ${hasWebsite ? 'active' : ''}`}>Ho un Sito / Profilo Social</button>
-                <button type="button" onClick={() => setHasWebsite(false)} className={`tab-button ${!hasWebsite ? 'active' : ''}`}>Non ho un sito (Richiedi Hub)</button>
-              </div>
-
-              {hasWebsite ? (
-                <div className="animate-[fadeUp_0.3s_ease-out_forwards]">
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">URL del tuo Sito o Profilo</label>
-                  <input type="text" required value={url} onChange={(e) => setUrl(e.target.value)} className="input-premium font-mono text-blue-200 mb-5" placeholder="Es. https://tiktok.com/@tuoprofilo" disabled={status === 'loading'} />
-                  
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Strategia Operativa</label>
-                  <textarea required rows="3" value={strategy} onChange={(e) => setStrategy(e.target.value)} className="input-premium resize-none hide-scrollbar text-sm" placeholder="Descrivi il tuo traffico e come promuoverai i link..." disabled={status === 'loading'}></textarea>
-                </div>
-              ) : (
-                <div className="bg-indigo-900/10 border border-indigo-500/20 p-6 rounded-xl animate-[fadeUp_0.3s_ease-out_forwards]">
-                  <h4 className="text-sm font-black text-indigo-300 mb-3 flex items-center gap-2"><span>🖥️</span> Creeremo noi l'Hub per te.</h4>
-                  <p className="text-xs text-indigo-200/80 leading-relaxed mb-6">Il network fornisce gratuitamente lo sviluppo di una Landing Page (Hub di comparazione) ottimizzata per le conversioni bancarie.</p>
-                  
-                  <div className="space-y-3 mb-6 bg-black/40 p-4 rounded-lg border border-white/5">
-                    <p className="text-[10px] font-black text-white uppercase tracking-widest border-b border-white/5 pb-2 mb-3">Istruzioni Post-Registrazione:</p>
-                    <p className="text-xs text-slate-300"><span className="text-blue-400 font-bold mr-2">1.</span> Completa questa iscrizione e attendi l'approvazione.</p>
-                    <p className="text-xs text-slate-300"><span className="text-blue-400 font-bold mr-2">2.</span> Accedi al <strong>Marketplace</strong> nella Dashboard per vedere le offerte.</p>
-                    <p className="text-xs text-slate-300"><span className="text-blue-400 font-bold mr-2">3.</span> Vai in <strong>Infrastruttura</strong> e invia la richiesta ufficiale indicando quali banche vuoi inserire nell'Hub.</p>
-                  </div>
-
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Inizia a descrivere la tua strategia di traffico:</label>
-                  <textarea required rows="2" value={strategy} onChange={(e) => setStrategy(e.target.value)} className="input-premium resize-none hide-scrollbar text-sm bg-black/50 border-indigo-500/30 focus:border-indigo-500" placeholder="Es. Farò Ads su Meta / Porterò traffico organico da TikTok..." disabled={status === 'loading'}></textarea>
+              {formData.hasVat && (
+                <div className="animate-[slideRight_0.2s_ease-out_forwards]">
+                  <input type="text" required placeholder="Inserisci Partita IVA" value={formData.vatNumber} onChange={(e) => setFormData({...formData, vatNumber: e.target.value})} className="input-premium font-mono" />
                 </div>
               )}
             </div>
 
-            {/* POLICY */}
-            <div className="flex items-start gap-4 p-5 rounded-xl bg-black/40 border border-white/5 cursor-pointer hover:border-white/10 transition-colors" onClick={() => setAcceptedTerms(!acceptedTerms)}>
-              <div className="pt-0.5"><input type="checkbox" checked={acceptedTerms} onChange={(e) => setAcceptedTerms(e.target.checked)} className="custom-checkbox" onClick={(e) => e.stopPropagation()} /></div>
-              <p className="text-[11px] text-slate-400 leading-relaxed select-none font-medium">Confermo la veridicità dei dati fiscali inseriti e accetto i <Link href="/terms" onClick={(e) => e.stopPropagation()} className="text-blue-400 font-bold hover:text-blue-300 underline underline-offset-2">Termini e Condizioni</Link>. Sono consapevole che il traffico fraudolento comporta l'espulsione dal network.</p>
+            {/* 3. Set-Up Traffico (Hub IT e Strategia) */}
+            <div className="space-y-4 bg-white/[0.02] p-6 rounded-2xl border border-white/5 shadow-lg">
+              <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5 pb-3">3. Infrastruttura e Traffico</h4>
+              
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Infrastruttura di Atterraggio</label>
+                <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                  <button type="button" onClick={() => setFormData({...formData, needsWebsite: true, existingWebsite: ''})} className={`flex-1 py-3.5 px-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all leading-tight ${formData.needsWebsite ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-black border border-white/10 text-slate-500'}`}>
+                    Voglio un HUB generato da voi
+                  </button>
+                  <button type="button" onClick={() => setFormData({...formData, needsWebsite: false})} className={`flex-1 py-3.5 px-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all leading-tight ${!formData.needsWebsite ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-black border border-white/10 text-slate-500'}`}>
+                    Uso un mio sito / landing
+                  </button>
+                </div>
+              </div>
+
+              {!formData.needsWebsite && (
+                <div className="animate-[slideRight_0.2s_ease-out_forwards]">
+                  <input type="url" required placeholder="Inserisci l'URL del tuo sito (es. https://...)" value={formData.existingWebsite} onChange={(e) => setFormData({...formData, existingWebsite: e.target.value})} className="input-premium mb-4" />
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <input type="text" required placeholder="Budget Ads Mensile (es. €1.000)" value={formData.adSpend} onChange={(e) => setFormData({...formData, adSpend: e.target.value})} className="input-premium" />
+                <input type="text" required placeholder="Traffico/Click Stimato Mensile" value={formData.expectedTraffic} onChange={(e) => setFormData({...formData, expectedTraffic: e.target.value})} className="input-premium" />
+              </div>
+
             </div>
 
-            {status === 'error' && (<div className="bg-rose-900/20 border border-rose-500/30 p-4 rounded-xl flex items-center gap-3"><span className="text-rose-500 text-xl">⚠️</span><p className="text-[11px] font-bold text-rose-200/80">{errorMessage}</p></div>)}
-
-            <div className="pt-2">
-              <button type="submit" disabled={status === 'loading'} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black text-[13px] px-8 py-5 rounded-2xl active:scale-95 uppercase tracking-widest transition-all disabled:opacity-50 shadow-[0_10px_30px_rgba(37,99,235,0.3)]">
-                {status === 'loading' ? 'Cifratura Dati in Corso...' : 'Sottoponi Candidatura'}
+            {/* Pulsante Invia */}
+            <div className="pt-6">
+              <button type="submit" disabled={loading} className="w-full bg-white text-black font-black text-[13px] py-5 rounded-xl uppercase tracking-widest hover:bg-slate-200 active:scale-95 transition-all shadow-[0_0_40px_rgba(255,255,255,0.2)] disabled:opacity-50 flex justify-center items-center gap-2">
+                {loading ? <span className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></span> : 'Sottoponi Candidatura'}
               </button>
             </div>
+            
+            <p className="text-center text-[10px] text-slate-500 mt-6 max-w-sm mx-auto leading-relaxed">
+              Cliccando su "Sottoponi Candidatura" accetti implicitamente i nostri <Link href="/terms" className="text-blue-400 hover:underline">Termini di Servizio B2B</Link> e autorizzi il trattamento dei dati secondo la <Link href="/terms" className="text-blue-400 hover:underline">Privacy Policy</Link>.
+            </p>
           </form>
         </div>
-        <p className="text-center mt-8 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
-          Sei già un nostro partner? <Link href="/login" className="text-white hover:text-blue-400 ml-1 transition-colors underline underline-offset-4">Esegui il Login</Link>
-        </p>
       </div>
-    </div>
+
+    </main>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -31,8 +31,6 @@ export default function Dashboard() {
   const [conversions, setConversions] = useState([]);
   const [stats, setStats] = useState({ clicks: 0, epc: 0, cr: 0 });
   const [chartData, setChartData] = useState([]);
-  const [notifications, setNotifications] = useState([]);
-  const [showNotifications, setShowNotifications] = useState(false);
   const [isLive, setIsLive] = useState(false);
   
   // UI & UX
@@ -41,10 +39,10 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [isMounted, setIsMounted] = useState(false);
   const [securityLock, setSecurityLock] = useState(false);
-  const [detectedIp, setDetectedIp] = useState('');
+  const [detectedIp, setDetectedIp] = useState('127.0.0.1');
   
-  // Form State (Aggiornato per KYC)
-  const [billing, setBilling] = useState({ full_name: '', has_vat: false, vat_number: '', tax_id: '', address: '', payment_info: '', registered_website: '', traffic_volume: '' });
+  // Form State
+  const [billing, setBilling] = useState({ full_name: '', has_vat: false, vat_number: '', tax_id: '', payment_info: '' });
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState({ text: '', type: '' });
   
@@ -53,12 +51,8 @@ export default function Dashboard() {
   const [selectedOffer, setSelectedOffer] = useState(null);
   const [isStrategyModalOpen, setIsStrategyModalOpen] = useState(false);
   const [siteForm, setSiteForm] = useState({ whereToPromote: '', goals: '' });
-  
-  const [gateForm, setGateForm] = useState({ url: '', strategy: '' });
-  const [isSubmittingGate, setIsSubmittingGate] = useState(false);
 
   const router = useRouter();
-  const unreadCount = notifications.filter(n => !n.is_read).length;
 
   useEffect(() => {
     setIsMounted(true);
@@ -78,27 +72,21 @@ export default function Dashboard() {
     setProfile(profileData);
     
     if (profileData?.traffic_status === 'approved') {
-      // Mappatura entity_type per compatibilità con vecchi account, convertiamo a has_vat
       const hasVat = profileData.entity_type === 'azienda' || (profileData.vat_number && profileData.vat_number.trim() !== '');
       setBilling({ 
         full_name: profileData.full_name || '', 
         has_vat: hasVat, 
         vat_number: profileData.vat_number || '', 
         tax_id: profileData.tax_id || '', 
-        address: profileData.address || '', 
-        payment_info: profileData.payment_info || '', 
-        registered_website: profileData.registered_website || '', 
-        traffic_volume: profileData.traffic_volume || '' 
+        payment_info: profileData.payment_info || '' 
       });
 
-      const [{ data: notifs }, { data: offersData }, { data: convData }, { data: clickData }] = await Promise.all([
-        supabase.from('notifications').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }),
+      const [{ data: offersData }, { data: convData }, { data: clickData }] = await Promise.all([
         supabase.from('offers').select('*'),
         supabase.from('conversions').select('*').eq('partner_id', currentUser.id).order('created_at', { ascending: false }),
         supabase.from('clicks').select('created_at').eq('affiliate_id', currentUser.id)
       ]);
 
-      setNotifications(notifs || []);
       setOffers(offersData || []);
       setConversions(convData || []);
 
@@ -141,10 +129,9 @@ export default function Dashboard() {
       const user = session.user;
       setUser(user);
 
-      let ip = 'Sconosciuto';
       try {
         const res = await fetch('https://api.ipify.org?format=json');
-        ip = (await res.json()).ip;
+        const ip = (await res.json()).ip;
         setDetectedIp(ip);
       } catch (e) {}
 
@@ -177,14 +164,12 @@ export default function Dashboard() {
 
   const authorizeDevice = async () => {
     localStorage.setItem('fp_device_auth_v1', 'true');
-    await supabase.from('notifications').insert([{ user_id: user.id, title: '📱 Dispositivo Verificato', message: `Autorizzazione concessa da IP: ${detectedIp}.`, type: 'success' }]);
     setSecurityLock(false);
     showToast("Dispositivo Autorizzato.", "success");
     if (stats.clicks === 0) setTimeout(() => setIsStrategyModalOpen(true), 800);
   };
 
   const lockAccountAndLogout = async () => {
-    await supabase.from('notifications').insert([{ user_id: user.id, title: '🚨 INTRUSIONE RESPINTA', message: `Accesso negato all'IP ${detectedIp}.`, type: 'error' }]);
     await supabase.auth.signOut();
     router.push('/login');
   };
@@ -196,23 +181,9 @@ export default function Dashboard() {
     setTimeout(() => setSettingsMsg({ text: '', type: '' }), 3500);
   };
 
-  const submitApplication = async (e) => {
-    e.preventDefault();
-    setIsSubmittingGate(true);
-    let cleanWebsite = gateForm.url.trim();
-    if (cleanWebsite && !cleanWebsite.startsWith('http')) cleanWebsite = `https://${cleanWebsite}`;
-    const adminBriefing = `CANDIDATURA:\nSorgente: ${cleanWebsite}\nStrategia: ${gateForm.strategy}`;
-    const { error } = await supabase.from('profiles').update({ registered_website: cleanWebsite, traffic_volume: gateForm.strategy, traffic_status: 'pending', traffic_notes: adminBriefing }).eq('id', user.id);
-    setIsSubmittingGate(false);
-    if (!error) setProfile({...profile, traffic_status: 'pending'});
-  };
-
   const handleGetLink = (offer, e) => {
     if (e) e.stopPropagation();
-    
-    if (profile?.traffic_status !== 'approved') {
-      return showToast("⚠️ Sorgente in Audit. Attendi approvazione tecnica.", "error");
-    }
+    if (profile?.traffic_status !== 'approved') return showToast("⚠️ Sorgente in Audit. Attendi approvazione tecnica.", "error");
     
     const baseUrl = "https://partnervest.net";
     const trackingLink = `${baseUrl}/api/click?offer_id=${offer.id}&subid=${user.id}`;
@@ -224,49 +195,22 @@ export default function Dashboard() {
     } else {
       const textArea = document.createElement("textarea");
       textArea.value = trackingLink;
-      textArea.style.position = "fixed"; 
-      textArea.style.left = "-9999px";
-      textArea.style.top = "0";
+      textArea.style.position = "fixed"; textArea.style.left = "-9999px"; textArea.style.top = "0";
       document.body.appendChild(textArea);
-      textArea.focus();
-      textArea.select();
-      try {
-        document.execCommand('copy');
-        showToast("🔗 Link S2S copiato correttamente", 'success');
-      } catch (err) {
-        showToast("Incolla manualmente: " + trackingLink, "error");
-      }
+      textArea.focus(); textArea.select();
+      try { document.execCommand('copy'); showToast("🔗 Link S2S copiato correttamente", 'success'); } 
+      catch (err) { showToast("Incolla manualmente: " + trackingLink, "error"); }
       document.body.removeChild(textArea);
-    }
-  };
-
-  const handleRequestSiteSubmit = async (e) => {
-    e.preventDefault();
-    setSavingSettings(true);
-    const targetName = selectedOffer ? selectedOffer.name : "Hub Globale";
-    const timestamp = new Date().toLocaleString('it-IT');
-    const newBriefing = `\n[${timestamp}] TARGET: ${targetName} | STRATEGIA: ${siteForm.whereToPromote} | KPI: ${siteForm.goals}`;
-    
-    const updatedNotes = (profile.traffic_notes || '') + newBriefing;
-    const { error } = await supabase.from('profiles').update({ traffic_notes: updatedNotes }).eq('id', user.id);
-    setSavingSettings(false);
-    if (!error) {
-      setProfile({...profile, traffic_notes: updatedNotes});
-      setIsSiteModalOpen(false);
-      showToast("✅ Briefing IT ricevuto.", 'success');
     }
   };
 
   const handleSaveSettings = async () => {
     setSavingSettings(true);
-    // Convertiamo has_vat di nuovo in entity_type per mantenere la compatibilità col DB se necessario
     const entityType = billing.has_vat ? 'azienda' : 'privato';
-    const vatNumberToSave = billing.has_vat ? billing.vat_number : '';
-
     const { error } = await supabase.from('profiles').update({
         full_name: billing.full_name,
         entity_type: entityType,
-        vat_number: vatNumberToSave,
+        vat_number: billing.has_vat ? billing.vat_number : '',
         tax_id: billing.tax_id.toUpperCase(),
         payment_info: billing.payment_info.replace(/\s+/g, '').toUpperCase()
     }).eq('id', user.id);
@@ -275,15 +219,16 @@ export default function Dashboard() {
     if (!error) { showToast('Dati crittografati e sincronizzati.', 'success'); setProfile({...profile, ...billing}); }
   };
 
-  const markNotificationsAsRead = async () => {
-    setShowNotifications(!showNotifications);
-    if (!showNotifications) {
-      const unreadIds = notifications.filter(n => !n.is_read).map(n => n.id);
-      if (unreadIds.length > 0) {
-        await supabase.from('notifications').update({ is_read: true }).in('id', unreadIds);
-        setNotifications(notifications.map(n => ({ ...n, is_read: true })));
-      }
-    }
+  const handleRequestSiteSubmit = async (e) => {
+    e.preventDefault();
+    setSavingSettings(true);
+    const targetName = selectedOffer ? selectedOffer.name : "Hub Globale";
+    const timestamp = new Date().toLocaleString('it-IT');
+    const newBriefing = `\n[${timestamp}] TARGET: ${targetName} | STRATEGIA: ${siteForm.whereToPromote} | KPI: ${siteForm.goals}`;
+    const updatedNotes = (profile.traffic_notes || '') + newBriefing;
+    const { error } = await supabase.from('profiles').update({ traffic_notes: updatedNotes }).eq('id', user.id);
+    setSavingSettings(false);
+    if (!error) { setProfile({...profile, traffic_notes: updatedNotes}); setIsSiteModalOpen(false); showToast("✅ Briefing IT ricevuto.", 'success'); }
   };
 
   if (!isMounted) return null;
@@ -307,28 +252,37 @@ export default function Dashboard() {
     );
   }
 
+  // =======================================================================
+  // GATEKEEPER - SALA D'ATTESA ADMIN (IL CUORE DEL BLOCCO)
+  // =======================================================================
   if (profile && profile.traffic_status !== 'approved') {
     return (
       <div className="min-h-screen bg-[#020617] text-white flex items-center justify-center p-4 relative overflow-hidden">
         <style dangerouslySetInnerHTML={{__html: `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap'); body { font-family: 'Inter', sans-serif; }` }} />
         <button onClick={handleLogout} className="absolute top-6 right-6 z-50 text-[10px] font-black text-slate-500 uppercase tracking-widest bg-white/5 px-4 py-2 rounded-full border border-white/10 backdrop-blur-md">Log Out</button>
         
-        {(!profile.traffic_status || profile.traffic_status === 'none') ? (
-          <div className="bg-slate-900/40 backdrop-blur-3xl p-8 sm:p-12 rounded-[2rem] max-w-lg w-full border border-white/5 shadow-2xl relative z-10">
-            <div className="w-14 h-14 bg-blue-500/10 border border-blue-500/30 rounded-2xl flex items-center justify-center mb-6 text-xl">🔐</div>
-            <h2 className="text-3xl font-black mb-2 tracking-tight">Accesso Privato</h2>
-            <p className="text-sm text-slate-400 mb-8 leading-relaxed">Network B2B ad alto rendimento. Operatività soggetta ad audit tecnico.</p>
-            <form onSubmit={submitApplication} className="space-y-5">
-              <div><label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Sorgente (URL Social/Web)</label><input type="text" required value={gateForm.url} onChange={e => setGateForm({...gateForm, url: e.target.value})} className="w-full bg-black/50 border border-white/10 p-4 rounded-xl text-blue-200 font-mono outline-none focus:border-blue-500" placeholder="https://" /></div>
-              <div><label className="block text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Strategia Operativa</label><textarea required rows="2" value={gateForm.strategy} onChange={e => setGateForm({...gateForm, strategy: e.target.value})} className="w-full bg-black/50 border border-white/10 p-4 rounded-xl text-white outline-none focus:border-blue-500 resize-none hide-scrollbar" placeholder="Descrivi volumi e canali..."></textarea></div>
-              <button type="submit" disabled={isSubmittingGate} className="w-full bg-blue-600 text-white font-black text-[11px] py-4 rounded-xl uppercase tracking-widest transition-all disabled:opacity-50">{isSubmittingGate ? 'Invio Briefing...' : 'Sottoponi a Compliance'}</button>
-            </form>
+        {profile.traffic_status === 'rejected' ? (
+          <div className="text-center p-10 bg-rose-950/20 rounded-[2rem] border border-rose-500/20 max-w-md w-full backdrop-blur-xl">
+             <div className="w-16 h-16 rounded-full border-2 border-rose-500/30 bg-rose-500/10 flex items-center justify-center text-2xl mx-auto mb-6">❌</div>
+             <h2 className="text-2xl font-black mb-2 text-white">Application Respinta</h2>
+             <p className="text-sm text-slate-400 mb-6 leading-relaxed">Purtroppo la tua candidatura non rispetta i requisiti di compliance del network per i volumi o le fonti di traffico dichiarate.</p>
           </div>
         ) : (
-          <div className="text-center p-10 bg-slate-900/40 rounded-[2rem] border border-amber-500/20 max-w-md w-full backdrop-blur-xl">
-            <div className="w-16 h-16 rounded-full border-2 border-amber-500/30 border-t-amber-500 animate-spin mx-auto mb-6"></div>
-            <h2 className="text-2xl font-black mb-2 text-white">Audit in Corso</h2>
-            <p className="text-sm text-slate-400 mb-6 leading-relaxed">Verifica impronta digitale del traffico. Richiede solitamente 12-24h.</p>
+          <div className="bg-[#0B1221] p-8 sm:p-12 rounded-[2rem] max-w-lg w-full border border-blue-500/20 shadow-[0_0_50px_rgba(59,130,246,0.1)] relative z-10 text-center animate-[slideUpFade_0.5s_ease-out_forwards]">
+            <div className="w-16 h-16 rounded-full border-2 border-blue-500/30 border-t-blue-500 animate-spin mx-auto mb-6"></div>
+            <h2 className="text-3xl font-black mb-2 tracking-tight text-white">Audit in Corso.</h2>
+            <p className="text-sm text-slate-400 mb-8 leading-relaxed">I tuoi dati sono in fase di verifica da parte del dipartimento Compliance. Attendi l'attivazione del Terminale.</p>
+            
+            <div className="bg-black/50 border border-white/5 rounded-xl p-5 text-left mb-6">
+              <h4 className="text-[9px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5 pb-2 mb-3">Riepilogo Dati Inviati</h4>
+              <ul className="space-y-2 text-xs">
+                <li className="flex justify-between"><span className="text-slate-500">Intestatario:</span> <span className="font-bold text-white">{profile.full_name}</span></li>
+                <li className="flex justify-between"><span className="text-slate-500">Codice Fiscale:</span> <span className="font-mono text-white">{profile.tax_id}</span></li>
+                <li className="flex justify-between"><span className="text-slate-500">IBAN:</span> <span className="font-mono text-white">{profile.payment_info}</span></li>
+                <li className="flex justify-between"><span className="text-slate-500">Tipologia:</span> <span className="font-bold text-white capitalize">{profile.entity_type}</span></li>
+              </ul>
+            </div>
+            
             <p className="text-[10px] text-slate-500 font-mono uppercase tracking-widest">Trace ID: {user.id.substring(0,12)}</p>
           </div>
         )}
@@ -336,6 +290,9 @@ export default function Dashboard() {
     );
   }
 
+  // =======================================================================
+  // GRAFICO DASHBOARD
+  // =======================================================================
   const maxClicks = Math.max(...chartData.map(d => d.clicks), 1);
   const ChartComponent = () => (
     <div className="bg-slate-900/20 backdrop-blur-md p-6 sm:p-8 rounded-[1.2rem] border border-white/5 mt-6 stagger-3 relative overflow-hidden">
@@ -461,7 +418,7 @@ export default function Dashboard() {
 
           {activeTab === 'marketplace' && (
             <div className="space-y-6">
-              <div className="pb-4 border-b border-white/5 stagger-1"><h1 className="text-3xl font-black text-white tracking-tight mb-2">Marketplace B2B</h1><p className="text-xs text-slate-400 leading-relaxed">Inventario offerte dirette con Payout Netti S2S (Zero Fee).</p></div>
+              <div className="pb-4 border-b border-white/5 stagger-1"><h1 className="text-3xl font-black text-white tracking-tight mb-2">Marketplace B2B</h1><p className="text-xs text-slate-400 leading-relaxed">Inventario offerte dirette con Payout Netti S2S.</p></div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {offers.map((offer, i) => (
                   <div key={offer.id} className="bg-slate-900/20 border border-white/5 p-6 rounded-[1.5rem] flex flex-col group transition-all hover:border-white/10" style={{animation: `slideUpFade 0.4s ease-out ${0.1 + (i*0.05)}s forwards`, opacity: 0}}>
@@ -496,53 +453,35 @@ export default function Dashboard() {
              </div>
           )}
 
-          {/* TAB KYC AGGIORNATO */}
           {activeTab === 'kyc' && (
              <div className="space-y-6 max-w-3xl">
                 <div className="pb-4 border-b border-white/5 stagger-1">
                   <h1 className="text-3xl font-black text-white tracking-tight">Dati & KYC</h1>
-                  <p className="text-xs text-slate-400">Coordinate criptate per erogazione pagamenti (Requisiti FinanceAds).</p>
+                  <p className="text-xs text-slate-400">Coordinate criptate per erogazione pagamenti.</p>
                 </div>
                 <div className="bg-slate-900/20 border border-white/5 p-6 sm:p-8 rounded-[1.5rem] stagger-2">
                    <div className="space-y-6">
                       
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                         {/* Intestatario */}
                          <div className="sm:col-span-2">
-                            <label className="block text-[9px] font-black text-slate-500 uppercase mb-2">Intestatario Pagamento (Nome Completo o Ragione Sociale)</label>
-                            <input type="text" value={billing.full_name} onChange={e => setBilling({...billing, full_name: e.target.value})} className="w-full bg-black/30 border border-white/5 p-4 rounded-xl outline-none focus:border-white/10 text-white transition-all" placeholder="Es. Mario Rossi" />
+                            <label className="block text-[9px] font-black text-slate-500 uppercase mb-2">Intestatario Pagamento</label>
+                            <input type="text" value={billing.full_name} onChange={e => setBilling({...billing, full_name: e.target.value})} className="w-full bg-black/30 border border-white/5 p-4 rounded-xl outline-none focus:border-white/10 text-white transition-all" />
                          </div>
-
-                         {/* Codice Fiscale (Sempre Obbligatorio) */}
                          <div className="sm:col-span-2">
                             <label className="block text-[9px] font-black text-slate-500 uppercase mb-2">Codice Fiscale (Obbligatorio)</label>
-                            <input type="text" value={billing.tax_id} onChange={e => setBilling({...billing, tax_id: e.target.value.toUpperCase()})} className="w-full bg-black/30 border border-white/5 p-4 rounded-xl outline-none focus:border-white/10 text-white transition-all uppercase font-mono" placeholder="RSSMRA..." maxLength={16} />
+                            <input type="text" value={billing.tax_id} onChange={e => setBilling({...billing, tax_id: e.target.value.toUpperCase()})} className="w-full bg-black/30 border border-white/5 p-4 rounded-xl outline-none focus:border-white/10 text-white transition-all uppercase font-mono" maxLength={16} />
                          </div>
-
-                         {/* Toggle Partita IVA */}
                          <div className="sm:col-span-2">
                             <label className="block text-[9px] font-black text-slate-500 uppercase mb-2">Sei in possesso di Partita IVA?</label>
                             <div className="flex gap-4">
-                               <button 
-                                 onClick={() => setBilling({...billing, has_vat: false, vat_number: ''})} 
-                                 className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!billing.has_vat ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
-                               >
-                                 No (Privato)
-                               </button>
-                               <button 
-                                 onClick={() => setBilling({...billing, has_vat: true})} 
-                                 className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${billing.has_vat ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}
-                               >
-                                 Sì (Azienda/P.IVA)
-                               </button>
+                               <button onClick={() => setBilling({...billing, has_vat: false, vat_number: ''})} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!billing.has_vat ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}>No (Privato)</button>
+                               <button onClick={() => setBilling({...billing, has_vat: true})} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${billing.has_vat ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}>Sì (Azienda)</button>
                             </div>
                          </div>
-
-                         {/* Campo P.IVA (Condizionale) */}
                          {billing.has_vat && (
                             <div className="sm:col-span-2 animate-[slideUpFade_0.2s_ease-out]">
                                <label className="block text-[9px] font-black text-slate-500 uppercase mb-2">Numero Partita IVA</label>
-                               <input type="text" value={billing.vat_number} onChange={e => setBilling({...billing, vat_number: e.target.value})} className="w-full bg-black/30 border border-white/5 p-4 rounded-xl outline-none focus:border-white/10 text-white transition-all font-mono" placeholder="IT01234..." />
+                               <input type="text" value={billing.vat_number} onChange={e => setBilling({...billing, vat_number: e.target.value})} className="w-full bg-black/30 border border-white/5 p-4 rounded-xl outline-none focus:border-white/10 text-white transition-all font-mono" />
                             </div>
                          )}
                       </div>
@@ -553,7 +492,7 @@ export default function Dashboard() {
                       </div>
                       
                       <button onClick={handleSaveSettings} disabled={savingSettings} className="w-full bg-emerald-600 text-white font-black text-[11px] py-4 rounded-xl uppercase tracking-widest mt-2 transition-all hover:bg-emerald-500 disabled:opacity-50">
-                        {savingSettings ? 'Sincronizzazione in corso...' : 'Salva e Sincronizza Criptando'}
+                        {savingSettings ? 'Sync...' : 'Salva Dati KYC'}
                       </button>
                    </div>
                 </div>
@@ -572,37 +511,29 @@ export default function Dashboard() {
         </nav>
       </div>
 
+      {/* Modali Omesse per Brevità (Rimangono quelle del codice precedente) */}
       {isSiteModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-[slideUpFade_0.3s_ease-out_forwards]" onClick={() => setIsSiteModalOpen(false)}>
           <div className="bg-[#0B1221] border border-white/10 p-8 rounded-3xl max-w-md w-full shadow-2xl relative" onClick={e => e.stopPropagation()}>
             <button onClick={() => setIsSiteModalOpen(false)} className="absolute top-5 right-5 text-slate-500 hover:text-white">✕</button>
             <h2 className="text-xl font-black mb-1 text-white">Deploy Infrastruttura IT</h2>
-            <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-6">Target: {selectedOffer ? selectedOffer.name : "Hub Globale B2B"}</p>
-            <form onSubmit={handleRequestSiteSubmit} className="space-y-4">
-              <div><label className="block text-[9px] font-black text-slate-500 uppercase mb-2">Sorgente Traffico (Es. Meta Ads)</label><textarea required rows="2" value={siteForm.whereToPromote} onChange={e=>setSiteForm({...siteForm, whereToPromote: e.target.value})} className="w-full bg-black/40 border border-white/5 p-4 rounded-xl outline-none resize-none text-sm text-white hide-scrollbar focus:border-blue-500"></textarea></div>
-              <div><label className="block text-[9px] font-black text-slate-500 uppercase mb-2">Budget Mensile Previsto (KPI)</label><input type="text" required value={siteForm.goals} onChange={e=>setSiteForm({...siteForm, goals: e.target.value})} className="w-full bg-black/40 border border-white/5 p-4 rounded-xl outline-none text-sm text-white focus:border-blue-500" /></div>
-              <div className="flex gap-2 pt-2">
-                <button type="submit" disabled={savingSettings} className="flex-1 text-[9px] font-black uppercase text-white bg-indigo-600 py-4 rounded-xl transition-all hover:bg-indigo-500 active:scale-95 disabled:opacity-50">{savingSettings ? 'Invio...' : 'Invia Briefing IT'}</button>
-              </div>
+            <form onSubmit={handleRequestSiteSubmit} className="space-y-4 mt-6">
+              <div><textarea required rows="2" value={siteForm.whereToPromote} onChange={e=>setSiteForm({...siteForm, whereToPromote: e.target.value})} placeholder="Sorgente (Es. Meta Ads)" className="w-full bg-black/40 border border-white/5 p-4 rounded-xl text-sm text-white focus:border-blue-500"></textarea></div>
+              <button type="submit" disabled={savingSettings} className="w-full text-[9px] font-black uppercase text-white bg-indigo-600 py-4 rounded-xl hover:bg-indigo-500">Invia Briefing</button>
             </form>
           </div>
         </div>
       )}
-
       {isStrategyModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-[slideUpFade_0.3s_ease-out_forwards]" onClick={() => setIsStrategyModalOpen(false)}>
           <div className="bg-[#0B1221] border border-white/10 p-8 rounded-3xl max-w-lg w-full text-center shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="w-16 h-16 bg-blue-500/10 border border-blue-500/30 rounded-full flex items-center justify-center text-2xl mx-auto mb-6">📊</div>
             <h2 className="text-2xl font-black mb-4 text-white racking-tight">Protocollo Tracking S2S</h2>
-            <p className="text-sm text-slate-400 mb-6 leading-relaxed">Il terminale utilizza esclusivamente un tracciamento Server-to-Server crittografato. Le conversioni vengono validate direttamente dai server bancari in background.</p>
-            <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-xl mb-6 text-rose-300 text-[10px] font-bold uppercase tracking-widest border-l-4 border-l-rose-500">
-              ⚠️ Vietato traffico incentivato o bot. Rilevamento frodi attivo.
-            </div>
+            <p className="text-sm text-slate-400 mb-6 leading-relaxed">Il terminale utilizza esclusivamente un tracciamento Server-to-Server crittografato.</p>
             <button onClick={() => setIsStrategyModalOpen(false)} className="w-full bg-white text-black font-black text-[10px] uppercase py-4 rounded-xl active:scale-95 shadow-lg">Inizializza Terminale</button>
           </div>
         </div>
       )}
-
       {isOfferModalOpen && selectedOffer && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-sm animate-[slideUpFade_0.3s_ease-out_forwards]" onClick={() => setIsOfferModalOpen(false)}>
           <div className="bg-[#0B1221] border border-white/10 p-8 rounded-3xl max-w-xl w-full shadow-2xl relative" onClick={e => e.stopPropagation()}>
@@ -614,13 +545,7 @@ export default function Dashboard() {
                   <span className="px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest bg-emerald-500/10 text-emerald-400">Payout Netto: €{selectedOffer.partner_payout?.toFixed(2)}</span>
                </div>
             </div>
-            <div className="space-y-4 text-sm text-slate-300 leading-relaxed font-medium">
-               <div className="bg-black/40 p-4 rounded-xl border border-white/5">
-                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Geo Target</p>
-                  <p className="font-mono text-xs text-blue-200">{selectedOffer.allowed_countries || 'Italia (IT)'}</p>
-               </div>
-                <p className="text-xs">{selectedOffer.description || "Dettagli in fase di caricamento..."}</p>
-            </div>
+            <p className="text-xs text-slate-300">{selectedOffer.description || "Dettagli offerta."}</p>
           </div>
         </div>
       )}
