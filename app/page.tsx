@@ -1,278 +1,376 @@
 "use client";
 
-import Link from 'next/link';
-import { useEffect, useRef, useState, ReactNode } from 'react';
+import { useState, useEffect } from 'react';
 
-// =======================================================================
-// TIPI TYPESCRIPT PER IL MOTORE DI ANIMAZIONE (Evita l'errore di Netlify)
-// =======================================================================
-interface RevealOnScrollProps {
-  children: ReactNode;
-  className?: string;
-  delay?: number;
-  threshold?: number;
-  id?: string;
-}
+export default function UltimateWealthEcosystem() {
+  // ==========================================================
+  // STATE MANAGEMENT CON "DATABASE" LOCALE (localStorage)
+  // ==========================================================
+  const [isMounted, setIsMounted] = useState(false);
+  const [activeTab, setActiveTab] = useState<'wealthy' | 'starter'>('wealthy');
+  
+  // Parametri eToro (Per chi parte da zero)
+  const [capitaleIniziale, setCapitaleIniziale] = useState<number>(0);
+  const [deposito, setDeposito] = useState<number>(200);
+  const [frequenza, setFrequenza] = useState<number>(12); // 12 = Mensile, 52 = Settimanale
+  const [anni, setAnni] = useState<number>(10);
+  const [apyEtoro, setApyEtoro] = useState<number>(15.0); // Modificabile dall'utente
 
-// =======================================================================
-// MOTORE DI ANIMAZIONE ALLO SCORRIMENTO (Scroll Reveal Engine)
-// =======================================================================
-const RevealOnScroll = ({ children, className = "", delay = 0, threshold = 0.1, id }: RevealOnScrollProps) => {
-  const [isVisible, setIsVisible] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  // Parametri YouHodler (Per chi ha capitali)
+  const [spesa, setSpesa] = useState<number>(2500);
+  const [capitale, setCapitale] = useState<number>(8000);
+  const [maxLtv, setMaxLtv] = useState<number>(90); // Modificabile
+  const [apyYouHodler, setApyYouHodler] = useState<number>(12.0); // Modificabile
+  const [aprYouHodler, setAprYouHodler] = useState<number>(10.0); // Modificabile
 
+  // Caricamento Dati Salvati
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-          observer.unobserve(entry.target);
-        }
-      },
-      { threshold }
-    );
-    if (ref.current) observer.observe(ref.current);
-    return () => observer.disconnect();
-  }, [threshold]);
+    setIsMounted(true);
+    const savedData = localStorage.getItem('partnerVestWealthDataV2');
+    if (savedData) {
+      const parsed = JSON.parse(savedData);
+      setCapitaleIniziale(parsed.capitaleIniziale || 0);
+      setDeposito(parsed.deposito || 200);
+      setFrequenza(parsed.frequenza || 12);
+      setAnni(parsed.anni || 10);
+      setApyEtoro(parsed.apyEtoro || 15.0);
+      setSpesa(parsed.spesa || 2500);
+      setCapitale(parsed.capitale || 8000);
+      setMaxLtv(parsed.maxLtv || 90);
+      setApyYouHodler(parsed.apyYouHodler || 12.0);
+      setAprYouHodler(parsed.aprYouHodler || 10.0);
+      setActiveTab(parsed.activeTab || 'wealthy');
+    }
+    document.documentElement.style.scrollBehavior = 'smooth';
+  }, []);
+
+  // Salvataggio Automatico
+  useEffect(() => {
+    if (isMounted) {
+      localStorage.setItem('partnerVestWealthDataV2', JSON.stringify({
+        capitaleIniziale, deposito, frequenza, anni, apyEtoro, spesa, capitale, maxLtv, apyYouHodler, aprYouHodler, activeTab
+      }));
+    }
+  }, [capitaleIniziale, deposito, frequenza, anni, apyEtoro, spesa, capitale, maxLtv, apyYouHodler, aprYouHodler, activeTab, isMounted]);
+
+  // ==========================================================
+  // LOGICA MATEMATICA: eToro (Interesse Composto Variabile)
+  // ==========================================================
+  const n_periodi = anni * frequenza;
+  const tasso_periodo = (apyEtoro / 100) / frequenza;
+  
+  const FV_iniziale = capitaleIniziale * Math.pow(1 + tasso_periodo, n_periodi);
+  const FV_depositi = deposito * ((Math.pow(1 + tasso_periodo, n_periodi) - 1) / tasso_periodo);
+  
+  const capitaleFinaleEtoro = FV_iniziale + FV_depositi;
+  const totaleVersatoEtoro = capitaleIniziale + (deposito * n_periodi);
+  const profittoGeneratoEtoro = capitaleFinaleEtoro - totaleVersatoEtoro;
+
+  // ==========================================================
+  // LOGICA MATEMATICA: YouHodler (Prestiti Variabili)
+  // ==========================================================
+  const LTV_DECIMAL = maxLtv / 100;
+  const APY_Y_DECIMAL = apyYouHodler / 100;
+  const APR_Y_DECIMAL = aprYouHodler / 100;
+
+  const collateraleRichiesto = spesa / LTV_DECIMAL;
+  const capitaleLibero = capitale - collateraleRichiesto;
+  const costoPrestitoAnnuo = spesa * APR_Y_DECIMAL;
+  const renditaAnnua = capitaleLibero > 0 ? capitaleLibero * APY_Y_DECIMAL : 0;
+  const deltaNettoYouHodler = renditaAnnua - costoPrestitoAnnuo;
+  const isLombardFattibile = (spesa / capitale) <= LTV_DECIMAL && capitale > 0 && spesa > 0;
+
+  // I TUOI LINK AFFILIATO (Ricorda che puoi gestirli anche tramite .env per maggiore sicurezza)
+  const LINK_ETORO = "https://www.financeads.net/tc.php?t=80001C110660650T";
+  const LINK_YOUHODLER = "https://www.financeads.net/tc.php?t=80001C324060796T";
+
+  if (!isMounted) return null;
 
   return (
-    <div
-      id={id}
-      ref={ref}
-      className={`${className} transition-all duration-[1000ms] cubic-bezier(0.16, 1, 0.3, 1) ${
-        isVisible ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-12 scale-[0.98]"
-      }`}
-      style={{ transitionDelay: `${delay}ms` }}
-    >
-      {children}
-    </div>
-  );
-};
-
-export default function Home() {
-  return (
-    <main className="min-h-screen bg-[#000000] text-slate-300 font-sans selection:bg-blue-500/30 overflow-hidden relative flex flex-col w-full">
+    <main className="min-h-screen bg-[#030303] text-slate-300 font-sans selection:bg-emerald-500/30 overflow-x-hidden pb-24">
       
-      {/* STILI GLOBALI E ANIMAZIONI INFINITE */}
+      {/* CSS: IMPATTO VISIVO DEVASTANTE */}
       <style dangerouslySetInnerHTML={{__html: `
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
-        
-        body { font-family: 'Inter', sans-serif; background-color: #000000; margin: 0; padding: 0; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&family=JetBrains+Mono:wght@400;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; background: #030303; }
         .font-mono { font-family: 'JetBrains Mono', monospace; }
         
-        @keyframes glowPulse { 0%, 100% { opacity: 0.15; transform: scale(1) rotate(0deg); } 50% { opacity: 0.35; transform: scale(1.05) rotate(2deg); } }
-        @keyframes dataStream { 0% { transform: translateY(-100%); opacity: 0; } 50% { opacity: 1; } 100% { transform: translateY(100%); opacity: 0; } }
+        .hero-bg { position: absolute; top: -10%; left: 50%; transform: translateX(-50%); width: 120vw; height: 60vh; background: radial-gradient(ellipse at top, rgba(16, 185, 129, 0.15) 0%, transparent 60%); pointer-events: none; z-index: 0; }
         
-        /* Glassmorphism Dinamico (Bento Box) */
-        .bento-box { background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 1.5rem; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); overflow: hidden; position: relative; }
-        @media (min-width: 768px) { 
-          .bento-box:hover { border-color: rgba(59, 130, 246, 0.4); background: rgba(255, 255, 255, 0.04); transform: translateY(-5px) scale(1.01); box-shadow: 0 30px 60px -15px rgba(59, 130, 246, 0.15); z-index: 10; } 
-          .bento-box:hover .bento-glow { opacity: 1; }
-        }
-        .bento-glow { position: absolute; inset: 0; background: radial-gradient(circle at center, rgba(59,130,246,0.15) 0%, transparent 70%); opacity: 0; transition: opacity 0.4s ease; pointer-events: none; }
+        .glass-box { background: rgba(12, 12, 12, 0.7); backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 1.5rem; transition: border-color 0.3s ease; }
+        .glass-box:hover { border-color: rgba(16, 185, 129, 0.2); }
         
-        .text-glow { background: linear-gradient(180deg, #ffffff 0%, #60A5FA 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        
-        /* Tasto Primary Premium */
-        .btn-beam { position: relative; display: inline-flex; align-items: center; justify-content: center; background: #000; color: white; padding: 2px; border-radius: 1.2rem; overflow: hidden; transition: transform 0.2s ease; }
-        .btn-beam::before { content: ''; position: absolute; inset: -50%; background: conic-gradient(from 0deg, transparent 70%, #3B82F6 80%, #ffffff 100%); animation: spin 3s linear infinite; }
-        .btn-beam-inner { position: relative; background: #000; border-radius: 1.1rem; padding: 1rem 2rem; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; transition: background 0.2s ease; }
-        .btn-beam:hover .btn-beam-inner { background: rgba(59, 130, 246, 0.1); }
-        .btn-beam:active { transform: scale(0.96); }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        .input-pro { width: 100%; background: transparent; border: none; border-bottom: 2px solid rgba(255,255,255,0.1); color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; font-weight: 800; padding: 0.5rem 0 0.5rem 2rem; outline: none; transition: all 0.3s ease; }
+        .input-pro:focus { border-bottom-color: #10B981; }
+        .input-small { font-size: 1.1rem; padding-left: 0.5rem; }
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
-        .bg-grid-fine { background-image: linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 24px 24px; }
+        .btn-green { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: #000; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; transition: all 0.2s ease; box-shadow: 0 10px 30px -10px rgba(16, 185, 129, 0.6); border: none; cursor: pointer; }
+        .btn-green:hover { transform: translateY(-3px); box-shadow: 0 15px 40px -10px rgba(16, 185, 129, 0.8); }
+        
+        .btn-blue { background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%); color: #fff; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; transition: all 0.2s ease; box-shadow: 0 10px 30px -10px rgba(59, 130, 246, 0.6); border: none; cursor: pointer; }
+        .btn-blue:hover { transform: translateY(-3px); box-shadow: 0 15px 40px -10px rgba(59, 130, 246, 0.8); }
+
+        .select-pro { background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 0.5rem; padding: 0.5rem; font-size: 0.8rem; outline: none; }
+
+        .tab-btn { flex: 1; padding: 1.25rem 1rem; border-radius: 1rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; border: 1px solid transparent; }
+        .tab-active { background: #fff; color: #000; box-shadow: 0 0 30px rgba(255,255,255,0.2); transform: scale(1.02); z-index: 10; }
+        .tab-inactive { background: rgba(255,255,255,0.03); color: #666; border-color: rgba(255,255,255,0.05); }
+        .tab-inactive:hover { background: rgba(255,255,255,0.08); color: #fff; }
       `}} />
 
-      {/* SFONDI AMBIENTALI ASSOLUTI */}
-      <div className="absolute inset-0 bg-grid-fine pointer-events-none" style={{ maskImage: 'linear-gradient(to bottom, black 5%, transparent 95%)', WebkitMaskImage: 'linear-gradient(to bottom, black 5%, transparent 95%)' }}></div>
-      <div className="absolute top-[-10%] left-[50%] -translate-x-1/2 w-[150vw] md:w-[80vw] h-[50vh] bg-blue-700/20 rounded-full blur-[100px] pointer-events-none" style={{animation: 'glowPulse 8s infinite alternate'}}></div>
+      <div className="hero-bg"></div>
 
-      {/* TOP NAVBAR */}
-      <nav className="fixed w-full z-50 bg-[#000000]/70 backdrop-blur-2xl border-b border-white/5">
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-3 group cursor-pointer">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center font-black text-white text-base sm:text-lg shadow-[0_0_20px_rgba(37,99,235,0.5)] group-hover:shadow-[0_0_30px_rgba(37,99,235,0.8)] transition-all duration-300">P</div>
-            <span className="font-black text-white text-lg sm:text-xl tracking-tight">Partner<span className="text-blue-500">Vest</span></span>
+      {/* ========================================================================= */}
+      {/* 1. HOOK (PRIMI 3 SECONDI) */}
+      {/* ========================================================================= */}
+      <section className="relative z-10 w-full px-4 pt-16 pb-12 max-w-[1000px] mx-auto text-center">
+        <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full border border-emerald-500/30 text-emerald-400 text-[10px] sm:text-xs font-black uppercase tracking-widest mb-8 bg-emerald-500/10 shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+          <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse mr-1"></span> Software Attivo (Dati Salvati)
+        </div>
+        
+        <h1 className="text-5xl sm:text-7xl font-black text-white mb-6 tracking-tighter leading-[1.05]">
+          Batti le Banche. <br />
+          <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-blue-500">Gioca con le loro regole.</span>
+        </h1>
+        
+        <p className="text-sm sm:text-lg text-slate-400 font-light leading-relaxed mb-12 max-w-2xl mx-auto">
+          Esistono solo due regole: se non hai soldi, automatizza l'accumulo. Se li hai già, usa il debito per proteggerli. Seleziona il tuo profilo qui sotto e sblocca l'algoritmo corretto.
+        </p>
+
+        <div className="flex flex-col sm:flex-row justify-center gap-3 max-w-2xl mx-auto bg-black/40 p-2 rounded-2xl border border-white/10 backdrop-blur-xl">
+          <div onClick={() => setActiveTab('starter')} className={`tab-btn ${activeTab === 'starter' ? 'tab-active' : 'tab-inactive'}`}>
+            <div className="text-xl mb-1">🌱</div>
+            <div className="text-xs">Parto da Zero</div>
           </div>
-          
-          <div className="hidden md:flex gap-8 text-[11px] font-black uppercase tracking-widest text-slate-400">
-            <a href="#sistema" className="hover:text-white transition-colors">Sistema S2S</a>
-            <a href="#compliance" className="hover:text-white transition-colors">Traffico</a>
-          </div>
-          
-          <div className="flex items-center gap-3 sm:gap-4">
-            <Link href="/login" className="text-[10px] sm:text-[11px] font-black text-slate-400 hover:text-white uppercase tracking-widest transition-colors hidden sm:block">Login S2S</Link>
-            <Link href="/signup" className="text-[10px] sm:text-[11px] font-black uppercase tracking-widest text-white bg-white/10 hover:bg-white/20 border border-white/10 px-5 py-2.5 rounded-lg transition-all active:scale-95">Applica Ora</Link>
+          <div onClick={() => setActiveTab('wealthy')} className={`tab-btn ${activeTab === 'wealthy' ? 'tab-active' : 'tab-inactive'}`}>
+            <div className="text-xl mb-1">🛡️</div>
+            <div className="text-xs">Ho dei Risparmi</div>
           </div>
         </div>
-      </nav>
-
-      {/* HERO SECTION */}
-      <section className="relative pt-32 pb-16 md:pt-48 md:pb-24 px-4 flex flex-col justify-center items-center z-10 w-full max-w-[1200px] mx-auto text-center min-h-[90vh]">
-        
-        <RevealOnScroll delay={0}>
-          <div className="mb-6 sm:mb-8 px-4 py-2 rounded-full bg-blue-950/40 border border-blue-500/30 text-blue-300 text-[9px] sm:text-[10px] font-mono tracking-widest flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(59,130,246,0.2)] max-w-fit mx-auto">
-            <div className="flex gap-1">
-              <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-ping"></span>
-              <span className="w-1.5 h-1.5 bg-blue-400 rounded-full"></span>
-            </div>
-            <span>[S2S] API.LISTENING: ONLINE</span>
-          </div>
-        </RevealOnScroll>
-        
-        <RevealOnScroll delay={100}>
-          <h1 className="text-[2.5rem] leading-[1.1] sm:text-5xl md:text-7xl lg:text-[6rem] font-black text-white tracking-tighter mb-6 max-w-5xl mx-auto px-2">
-            Dominio <br className="hidden sm:block" />
-            <span className="text-glow">Finanziario.</span>
-          </h1>
-        </RevealOnScroll>
-        
-        <RevealOnScroll delay={200}>
-          <p className="text-sm sm:text-base md:text-xl text-slate-400 mb-10 leading-relaxed max-w-2xl mx-auto font-medium px-2">
-            L'infrastruttura B2B che garantisce il <strong className="text-white">100% di tracciamento</strong>. Niente cookie persi. Payout netti erogati via protocollo Server-to-Server.
-          </p>
-        </RevealOnScroll>
-        
-        <RevealOnScroll delay={300} className="w-full sm:w-auto px-4">
-          <Link href="/signup" className="btn-beam w-full sm:w-auto">
-            <div className="btn-beam-inner font-black text-[11px] sm:text-[13px] uppercase tracking-widest">
-              Inizializza Terminale
-            </div>
-          </Link>
-        </RevealOnScroll>
-
-        {/* Floating Mini-Stats */}
-        <RevealOnScroll delay={400} className="mt-16 sm:mt-24 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 w-full max-w-4xl px-2">
-           {[{l: 'CPA Media', v: '€45 - €150', c: 'text-emerald-400'}, {l: 'Tracking', v: 'Server-Side', c: 'text-blue-400'}, {l: 'Pagamenti', v: 'Bonifico SEPA', c: 'text-indigo-400'}, {l: 'Ammissione', v: 'Su Invito', c: 'text-rose-400'}].map((s,i) => (
-             <div key={i} className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center backdrop-blur-md">
-                <p className="text-[8px] sm:text-[9px] uppercase font-black text-slate-500 tracking-widest mb-1">{s.l}</p>
-                <p className={`font-mono font-black text-sm sm:text-base tracking-tight ${s.c}`}>{s.v}</p>
-             </div>
-           ))}
-        </RevealOnScroll>
       </section>
 
-      {/* BENTO BOX GRID SECTION */}
-      <section id="sistema" className="py-16 sm:py-24 relative z-10 w-full px-4">
-        <div className="max-w-[1200px] mx-auto">
-          
-          <RevealOnScroll className="text-center mb-12 sm:mb-16 px-2">
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">Tecnologia Asimmetrica.</h2>
-            <p className="text-slate-400 text-sm sm:text-base leading-relaxed max-w-2xl mx-auto">Progettato per superare chirurgicamente i limiti tecnici dell'affiliate marketing convenzionale.</p>
-          </RevealOnScroll>
+      {/* ========================================================================= */}
+      {/* PATH A: PARTO DA ZERO (ETORO - DCA & COPYTRADING) */}
+      {/* ========================================================================= */}
+      {activeTab === 'starter' && (
+        <div className="animate-[fadeIn_0.4s_ease-out]">
+          <section className="relative z-10 max-w-[1200px] mx-auto px-4 pb-16">
+            <div className="glass-box p-6 sm:p-10 border-t-4 border-t-blue-500">
+              <div className="mb-10 text-center lg:text-left">
+                <h2 className="text-3xl font-black text-white mb-2">Terminale di Costruzione</h2>
+                <p className="text-sm text-slate-400 font-light">Se parti da zero, il tuo obiettivo è accumulare in automatico senza farti condizionare dalle emozioni del mercato.</p>
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6 auto-rows-auto md:auto-rows-[280px]">
-            
-            {/* Box 1: S2S */}
-            <RevealOnScroll delay={0} className="md:col-span-2 md:row-span-2">
-              <div className="bento-box h-full p-6 sm:p-10 flex flex-col justify-between group">
-                <div className="bento-glow"></div>
-                <div>
-                   <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-500/10 border border-blue-500/30 rounded-2xl flex items-center justify-center text-xl sm:text-2xl mb-6 shadow-lg">⚡</div>
-                   <h3 className="text-2xl sm:text-4xl font-black text-white mb-3 sm:mb-4 tracking-tight">Postback S2S</h3>
-                   <p className="text-slate-400 text-sm sm:text-base max-w-md leading-relaxed">Il browser dell'utente non gestisce i dati critici. Le conversioni vengono inviate direttamente dai server bancari ai nostri server. Drop rate ridotto a zero assoluto.</p>
-                </div>
-                {/* Fake Code Block */}
-                <div className="mt-8 bg-[#050B14] border border-blue-500/20 rounded-xl p-4 sm:p-5 font-mono text-[9px] sm:text-xs text-blue-300/80 shadow-inner relative overflow-hidden">
-                  <div className="absolute top-0 bottom-0 left-4 w-px bg-blue-500/30">
-                     <div className="w-1 h-8 bg-blue-400 -ml-[1.5px] rounded-full" style={{animation: 'dataStream 2s linear infinite'}}></div>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                {/* INPUTS ETORO */}
+                <div className="lg:col-span-7 flex flex-col gap-6">
+                  <div className="bg-black/40 p-6 sm:p-8 rounded-2xl border border-white/5 shadow-inner">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 mb-8">
+                      <div>
+                        <label className="block text-[10px] text-blue-400 font-black uppercase tracking-widest mb-2">Versamento Ricorrente</label>
+                        <div className="relative">
+                          <span className="absolute left-0 bottom-3 text-white/30 font-mono text-xl">€</span>
+                          <input type="number" value={deposito || ''} onChange={(e) => setDeposito(Number(e.target.value))} className="input-pro" placeholder="200" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-white font-black uppercase tracking-widest mb-2">Frequenza</label>
+                        <select value={frequenza} onChange={(e) => setFrequenza(Number(e.target.value))} className="select-pro w-full mt-2 text-lg py-3">
+                          <option value={52}>Settimanale</option>
+                          <option value={12}>Mensile</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                      <div>
+                        <label className="block text-[10px] text-slate-400 font-bold uppercase mb-2">Rendimento Annuo Stimato (APY)</label>
+                        <div className="relative">
+                          <input type="number" value={apyEtoro || ''} onChange={(e) => setApyEtoro(Number(e.target.value))} className="input-pro input-small pr-6" />
+                          <span className="absolute right-0 bottom-3 text-white/50 font-mono">%</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-slate-400 font-bold uppercase mb-2">Orizzonte Temporale</label>
+                        <input type="range" min="1" max="30" step="1" value={anni} onChange={(e) => setAnni(Number(e.target.value))} className="w-full accent-blue-500 h-2 bg-white/10 rounded-full appearance-none mt-4" />
+                        <div className="text-right text-white font-mono mt-2 font-bold">{anni} Anni</div>
+                      </div>
+                    </div>
                   </div>
-                  <p className="pl-6"><span className="text-pink-500">const</span> <span className="text-blue-400">conversion</span> = <span className="text-pink-500">await</span> <span className="text-green-400">supabase</span>.from(<span className="text-yellow-300">'conversions'</span>)</p>
-                  <p className="pl-6 mt-1">  .insert(&#123; partner_id: <span className="text-yellow-300">'{'{subid}'}'</span>, amount: <span className="text-emerald-400">payout</span> &#125;)</p>
-                  <p className="pl-6 mt-2 text-slate-500">// 200 OK - Wallet Aggiornato Istantaneamente</p>
+                </div>
+
+                {/* OUTPUT & CPA ETORO */}
+                <div className="lg:col-span-5 relative">
+                  <div className="bg-[#050810] border border-blue-500/20 rounded-2xl p-6 sm:p-8 h-full flex flex-col justify-between">
+                    <div>
+                      <h3 className="text-[10px] font-black text-blue-500 uppercase tracking-[0.2em] mb-4 text-center border-b border-blue-500/10 pb-4">Proiezione Patrimonio Totale</h3>
+                      <div className="font-mono text-5xl font-black text-white text-center mb-8 py-4">
+                        {"€" + capitaleFinaleEtoro.toFixed(0)}
+                      </div>
+                      <div className="space-y-3 text-xs font-mono">
+                        <div className="flex justify-between items-center bg-white/5 p-3 rounded">
+                          <span className="text-slate-400">TOTALE VERSATO DA TE:</span>
+                          <span className="font-bold text-white">{"€" + totaleVersatoEtoro.toFixed(0)}</span>
+                        </div>
+                        <div className="flex justify-between items-center bg-blue-500/10 p-3 rounded border border-blue-500/20">
+                          <span className="text-blue-400">INTERESSE COMPOSTO:</span>
+                          <span className="font-bold text-blue-400">{"+ €" + profittoGeneratoEtoro.toFixed(0)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-8 text-center pt-6 border-t border-white/10">
+                      {/* BOTTONE CPA PRIMA */}
+                      <a href={LINK_ETORO} target="_blank" rel="noopener noreferrer" className="btn-blue inline-block px-10 py-5 rounded-xl w-full text-sm mb-6">
+                        Attiva Accumulo su eToro
+                      </a>
+                      
+                      {/* SPIEGAZIONE SOTTO IL BOTTONE */}
+                      <div className="text-left bg-blue-500/5 p-4 rounded-xl border border-blue-500/10">
+                        <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Come massimizzare la strategia:</h4>
+                        <p className="text-[11px] text-slate-400 font-light leading-relaxed">
+                          <strong className="text-white">1. Il segreto del DCA:</strong> Impostando un deposito ricorrente (settimanale o mensile), acquisti quote sia quando il mercato sale che quando crolla, abbattendo matematicamente il rischio di ingresso (Dollar Cost Averaging).<br/><br/>
+                          <strong className="text-white">2. Usa il CopyTrading:</strong> Non hai tempo per studiare i grafici? Su eToro puoi copiare automaticamente il portafoglio degli investitori d'élite. Loro analizzano il mercato, tu incassi le stesse percentuali di profitto sui tuoi depositi.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </RevealOnScroll>
-
-            {/* Box 2: Hub IT */}
-            <RevealOnScroll delay={100} className="h-full">
-              <div className="bento-box h-full p-6 sm:p-8 flex flex-col justify-between group">
-                <div className="bento-glow"></div>
-                <div className="w-12 h-12 bg-indigo-500/10 border border-indigo-500/30 rounded-xl flex items-center justify-center text-xl mb-4">🖥️</div>
-                <div>
-                  <h4 className="text-lg sm:text-xl font-black text-white mb-2">Deploy Hub IT</h4>
-                  <p className="text-xs sm:text-sm text-slate-400">Forniamo landing page e funnel ad alta conversione pronti all'uso sui nostri domini trust.</p>
-                </div>
-              </div>
-            </RevealOnScroll>
-
-            {/* Box 3: Payout */}
-            <RevealOnScroll delay={200} className="h-full">
-              <div className="bento-box h-full p-6 sm:p-8 flex flex-col justify-center items-center text-center group bg-gradient-to-b from-emerald-900/10 to-transparent">
-                <div className="bento-glow"></div>
-                <h3 className="text-5xl sm:text-6xl font-black text-emerald-400 mb-2 font-mono tracking-tighter">100%</h3>
-                <h4 className="text-base sm:text-lg font-black text-white mb-2">Payout Netto</h4>
-                <p className="text-xs sm:text-sm text-slate-400">Zero commissioni nascoste. Quello che la banca paga, tu lo ricevi.</p>
-              </div>
-            </RevealOnScroll>
-
-            {/* Box 4: TRAFFICO BLINDATO E COMPLIANCE */}
-            <RevealOnScroll delay={0} className="md:col-span-3" id="compliance">
-              <div className="bento-box h-full p-6 sm:p-10 flex flex-col md:flex-row items-center gap-6 sm:gap-8 group bg-gradient-to-r from-slate-900/40 to-transparent border-t-blue-500/20">
-                <div className="bento-glow"></div>
-                <div className="w-16 h-16 shrink-0 bg-slate-800 border border-slate-600 rounded-2xl flex items-center justify-center text-3xl">🛡️</div>
-                <div>
-                  <h3 className="text-xl sm:text-2xl font-black text-white mb-2">Traffico Blindato.</h3>
-                  <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-4xl">
-                    Lavorare nel settore finanziario richiede partnership solide. Autorizziamo preventivamente le tue sorgenti di traffico (Meta, Google, TikTok, Native) per garantirti un business model scalabile e totalmente al riparo da ban o sospensioni improvvise da parte degli istituti bancari.
-                  </p>
-                </div>
-              </div>
-            </RevealOnScroll>
-
-          </div>
+            </div>
+          </section>
         </div>
-      </section>
+      )}
 
-      {/* CALL TO ACTION MASSIVA */}
-      <section className="py-20 sm:py-32 relative z-10 w-full text-center px-4 mt-8 sm:mt-16">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/15 via-[#000000] to-[#000000] -z-10"></div>
-        
-        <RevealOnScroll>
-          <div className="max-w-[800px] mx-auto border border-blue-500/20 bg-[#0B1221]/50 backdrop-blur-2xl p-8 sm:p-16 rounded-[2.5rem] sm:rounded-[3rem] shadow-[0_0_80px_rgba(37,99,235,0.15)] relative overflow-hidden">
-            <div className="absolute -top-1/2 -left-1/2 w-[200%] h-[200%] bg-[conic-gradient(from_0deg,transparent_70%,rgba(59,130,246,0.1)_80%,transparent_100%)] animate-[spin_6s_linear_infinite] -z-10"></div>
-            
-            <div className="w-14 h-14 sm:w-16 sm:h-16 mx-auto bg-black border border-white/10 rounded-xl sm:rounded-2xl flex items-center justify-center text-2xl mb-6 shadow-2xl relative z-10">🔒</div>
-            <h2 className="text-3xl sm:text-5xl font-black text-white mb-4 sm:mb-6 tracking-tight relative z-10 px-2">Il Terminale Ti Aspetta.</h2>
-            <p className="text-slate-400 mb-8 sm:mb-10 text-sm sm:text-base font-medium leading-relaxed max-w-lg mx-auto relative z-10 px-2">
-              Ammissione a numero chiuso. L'approvazione è manuale e dedicata a chi sa muovere volumi di traffico reali.
-            </p>
-            <Link href="/signup" className="inline-block w-full sm:w-auto px-10 sm:px-12 py-4 sm:py-5 rounded-xl sm:rounded-2xl bg-white text-black font-black text-[11px] sm:text-[13px] uppercase tracking-widest hover:bg-slate-200 active:scale-95 transition-all shadow-[0_0_40px_rgba(255,255,255,0.3)] relative z-10">
-              Richiedi Accesso B2B
-            </Link>
-          </div>
-        </RevealOnScroll>
-      </section>
+      {/* ========================================================================= */}
+      {/* PATH B: HO DEI RISPARMI (YOUHODLER - LOMBARD HACK) */}
+      {/* ========================================================================= */}
+      {activeTab === 'wealthy' && (
+        <div className="animate-[fadeIn_0.4s_ease-out]">
+          <section className="relative z-10 max-w-[1200px] mx-auto px-4 pb-16">
+            <div className="glass-box p-6 sm:p-10 border-t-4 border-t-emerald-500">
+              <div className="mb-10 text-center lg:text-left">
+                <h2 className="text-3xl font-black text-white mb-2">Terminale di Estrazione</h2>
+                <p className="text-sm text-slate-400 font-light">Vuoi fare un acquisto importante? Non vendere i tuoi asset. Usa il capitale come scudo per farti prestare i contanti istantaneamente.</p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                {/* INPUTS YOUHODLER */}
+                <div className="lg:col-span-7 flex flex-col gap-6">
+                  <div className="bg-black/40 p-6 sm:p-8 rounded-2xl border border-white/5 shadow-inner">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 mb-8">
+                      <div>
+                        <label className="block text-[10px] text-emerald-400 font-black uppercase tracking-widest mb-2">Contanti Richiesti (Spesa)</label>
+                        <div className="relative">
+                          <span className="absolute left-0 bottom-3 text-emerald-500/50 font-mono text-xl">€</span>
+                          <input type="number" value={spesa || ''} onChange={(e) => setSpesa(Number(e.target.value))} className="input-pro" placeholder="0" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-white font-black uppercase tracking-widest mb-2">I Tuoi Risparmi (Collaterale)</label>
+                        <div className="relative">
+                          <span className="absolute left-0 bottom-3 text-white/30 font-mono text-xl">€</span>
+                          <input type="number" value={capitale || ''} onChange={(e) => setCapitale(Number(e.target.value))} className="input-pro" placeholder="0" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4 pt-6 border-t border-white/10">
+                      <div>
+                        <label className="block text-[9px] text-slate-400 font-bold uppercase mb-2">Max LTV</label>
+                        <div className="relative">
+                          <input type="number" value={maxLtv || ''} onChange={(e) => setMaxLtv(Number(e.target.value))} className="input-pro input-small pr-4" />
+                          <span className="absolute right-0 bottom-2 text-slate-500 font-mono">%</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] text-emerald-400 font-bold uppercase mb-2">Rendita (APY)</label>
+                        <div className="relative">
+                          <input type="number" value={apyYouHodler || ''} onChange={(e) => setApyYouHodler(Number(e.target.value))} className="input-pro input-small pr-4" />
+                          <span className="absolute right-0 bottom-2 text-slate-500 font-mono">%</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[9px] text-rose-400 font-bold uppercase mb-2">Costo (APR)</label>
+                        <div className="relative">
+                          <input type="number" value={aprYouHodler || ''} onChange={(e) => setAprYouHodler(Number(e.target.value))} className="input-pro input-small pr-4" />
+                          <span className="absolute right-0 bottom-2 text-slate-500 font-mono">%</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* OUTPUT & CPA YOUHODLER */}
+                <div className="lg:col-span-5 relative">
+                  <div className="bg-[#050810] border border-emerald-500/20 rounded-2xl p-6 sm:p-8 h-full flex flex-col justify-between">
+                    {!isLombardFattibile && (
+                      <div className="absolute inset-0 bg-black/95 backdrop-blur-md rounded-2xl flex flex-col items-center justify-center p-8 text-center z-20 border border-rose-500/40">
+                        <p className="text-rose-500 font-black text-2xl mb-2">Collaterale Insufficiente</p>
+                        <p className="text-slate-300 text-xs leading-relaxed">Per avere {"€" + spesa} oggi con un LTV del {maxLtv}%, devi depositare almeno <strong className="text-white">{"€" + collateraleRichiesto.toFixed(0)}</strong> a garanzia. Aumenta "I Tuoi Risparmi".</p>
+                      </div>
+                    )}
+                    
+                    <div>
+                      <h3 className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-4 text-center border-b border-emerald-500/10 pb-4">Report Algoritmico a 12 Mesi</h3>
+                      <div className="space-y-4 text-xs font-mono">
+                        <div className="flex justify-between items-center bg-white/5 p-3 rounded">
+                          <span className="text-slate-400">CAPITALE A RENDITA:</span>
+                          <span className="font-bold text-emerald-400">{"€" + capitaleLibero.toFixed(0)}</span>
+                        </div>
+                        <div className="flex justify-between items-center px-2">
+                          <span className="text-rose-400/70">COSTO PRESTITO (Da Pagare):</span>
+                          <span className="font-bold text-rose-400">{"- €" + costoPrestitoAnnuo.toFixed(0)}</span>
+                        </div>
+                        <div className="flex justify-between items-center bg-emerald-500/10 p-3 rounded border border-emerald-500/20">
+                          <span className="text-emerald-400">INTERESSI (Incassati):</span>
+                          <span className="font-bold text-emerald-400">{"+ €" + renditaAnnua.toFixed(0)}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-6 pt-6 border-t border-white/10 text-center mb-6">
+                        <div className="flex justify-between items-end text-left">
+                          <span className="font-black text-white text-[11px] uppercase tracking-widest">Saldo Netto Annuo</span>
+                          <span className={`font-mono font-black text-4xl ${deltaNettoYouHodler >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {(deltaNettoYouHodler > 0 ? "+" : "") + "€" + deltaNettoYouHodler.toFixed(0)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="text-center">
+                      {/* BOTTONE CPA PRIMA */}
+                      <a 
+                        href={isLombardFattibile && deltaNettoYouHodler >= 0 ? LINK_YOUHODLER : "#"} 
+                        target={isLombardFattibile && deltaNettoYouHodler >= 0 ? "_blank" : "_self"}
+                        className={`btn-green inline-block px-10 py-5 rounded-xl w-full text-sm mb-6 ${(!isLombardFattibile || deltaNettoYouHodler < 0) && 'opacity-50 grayscale cursor-not-allowed'}`}
+                      >
+                        Avvia Estrazione su YouHodler
+                      </a>
+
+                      {/* SPIEGAZIONE SOTTO IL BOTTONE */}
+                      <div className="text-left bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/10">
+                        <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">Come gestire il prestito in sicurezza:</h4>
+                        <p className="text-[11px] text-slate-400 font-light leading-relaxed">
+                          <strong className="text-white">1. Evita la Liquidazione:</strong> Anche se la piattaforma permette un LTV fino al 90%, è consigliabile usare un capitale maggiore per tenere il margine intorno al 70%. In questo modo, se il mercato crypto subisce un "flash crash", il tuo collaterale è al sicuro.<br/><br/>
+                          <strong className="text-white">2. Rate Invisibili:</strong> Non estinguere il prestito usando il tuo stipendio. Lascia che la rendita generata (l'APY) dal tuo collaterale vada a coprire e abbattere il costo del debito (APR) in automatico mese dopo mese. Tu goditi la liquidità.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* FOOTER */}
-      <footer className="bg-[#000000] py-10 sm:py-12 border-t border-white/5 w-full z-10 relative">
-        <div className="max-w-[1200px] mx-auto px-6 flex flex-col md:flex-row items-center md:items-start justify-between gap-6 text-center md:text-left">
-          
-          <div className="flex flex-col items-center md:items-start gap-3">
-            <div className="flex items-center gap-2 opacity-80 group">
-              <div className="w-6 h-6 bg-white/10 rounded flex items-center justify-center font-black text-white text-[10px] border border-white/10 group-hover:bg-blue-600 transition-colors">P</div>
-              <span className="font-black text-white text-sm tracking-tight">PartnerVest</span>
-            </div>
-            <p className="text-[9px] text-slate-500 font-mono max-w-[250px]">
-              Infrastruttura B2B indipendente.
-            </p>
-          </div>
-          
-          <div className="flex flex-col items-center md:items-end gap-3 text-[9px] font-black text-slate-500 uppercase tracking-widest w-full md:w-auto">
-            <div className="flex gap-6">
-              <Link href="/login" className="hover:text-white transition-colors">Terminale S2S</Link>
-              <Link href="/terms" className="hover:text-white transition-colors">Legal Policy</Link>
-            </div>
-            <div className="bg-white/5 border border-white/10 px-4 py-2.5 rounded-lg flex items-center gap-2 w-full sm:w-auto justify-center mt-2 hover:bg-white/10 transition-colors">
-              <span>Supporto:</span>
-              <a href="mailto:finance.partnerr@gmail.com" className="text-blue-400 hover:text-blue-300 lowercase font-bold tracking-normal text-[10px]">finance.partnerr@gmail.com</a>
-            </div>
-            <p className="mt-2 text-slate-700 opacity-60 font-mono">© 2026 PartnerVest. Tutti i diritti riservati.</p>
-          </div>
-
-        </div>
+      <footer className="mt-10 text-center px-4 relative z-10 border-t border-white/5 pt-10">
+        <p className="text-[10px] text-slate-600 font-light max-w-2xl mx-auto leading-relaxed">
+          I calcolatori utilizzano stime dinamiche. I tassi APY/APR e le policy LTV sulle piattaforme partner (YouHodler/eToro) possono variare in base alle condizioni di mercato reali. L'investimento in asset digitali comporta rischio di volatilità e perdita del capitale. Strumento ad esclusivo uso didattico.
+        </p>
       </footer>
 
     </main>
