@@ -25,7 +25,7 @@ export default function UltimateWealthEcosystem() {
 
   useEffect(() => {
     setIsMounted(true);
-    const savedData = localStorage.getItem('partnerVestWealthDataV4');
+    const savedData = localStorage.getItem('partnerVestWealthDataV5');
     if (savedData) {
       const parsed = JSON.parse(savedData);
       setCapitaleIniziale(parsed.capitaleIniziale || 0);
@@ -44,7 +44,7 @@ export default function UltimateWealthEcosystem() {
 
   useEffect(() => {
     if (isMounted) {
-      localStorage.setItem('partnerVestWealthDataV4', JSON.stringify({
+      localStorage.setItem('partnerVestWealthDataV5', JSON.stringify({
         capitaleIniziale, deposito, frequenza, anni, apyEtoro, spesa, capitale, maxLtv, apyYouHodler, aprYouHodler, activeTab
       }));
     }
@@ -77,9 +77,8 @@ export default function UltimateWealthEcosystem() {
   if (!isMounted) return null;
 
   return (
-    <main className="min-h-screen bg-[#030303] text-slate-300 font-sans selection:bg-emerald-500/30 overflow-x-hidden pb-40 relative">
+    <main className="min-h-screen bg-[#030303] text-slate-300 font-sans selection:bg-emerald-500/30 overflow-x-hidden pb-20 relative">
       
-      {/* CSS PURO PER FORZARE I BOTTONI CPA */}
       <style dangerouslySetInnerHTML={{__html: `
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&family=JetBrains+Mono:wght@400;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; background: #030303; }
@@ -96,46 +95,6 @@ export default function UltimateWealthEcosystem() {
         .tab-btn { flex: 1; padding: 1rem; border-radius: 1rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; border: 1px solid transparent; text-align: center; }
         .tab-active { background: #fff; color: #000; box-shadow: 0 0 30px rgba(255,255,255,0.2); transform: scale(1.02); z-index: 10; }
         .tab-inactive { background: rgba(255,255,255,0.03); color: #666; border-color: rgba(255,255,255,0.05); }
-        
-        /* CLASSI INDISTRUTTIBILI PER I BOTTONI CPA */
-        .cpa-btn-green {
-          display: block !important;
-          width: 100% !important;
-          background-color: #10B981 !important;
-          color: #000000 !important;
-          text-align: center !important;
-          padding: 1.5rem 1rem !important;
-          border-radius: 1rem !important;
-          font-weight: 900 !important;
-          font-size: 1.1rem !important;
-          text-transform: uppercase !important;
-          text-decoration: none !important;
-          box-shadow: 0 8px 25px rgba(16, 185, 129, 0.5) !important;
-          transition: transform 0.2s ease !important;
-          margin-bottom: 1rem !important;
-          cursor: pointer !important;
-        }
-        .cpa-btn-green:active { transform: scale(0.95) !important; }
-        .cpa-btn-green.disabled { background-color: #333333 !important; color: #888888 !important; box-shadow: none !important; pointer-events: none !important; }
-
-        .cpa-btn-blue {
-          display: block !important;
-          width: 100% !important;
-          background-color: #3B82F6 !important;
-          color: #ffffff !important;
-          text-align: center !important;
-          padding: 1.5rem 1rem !important;
-          border-radius: 1rem !important;
-          font-weight: 900 !important;
-          font-size: 1.1rem !important;
-          text-transform: uppercase !important;
-          text-decoration: none !important;
-          box-shadow: 0 8px 25px rgba(59, 130, 246, 0.5) !important;
-          transition: transform 0.2s ease !important;
-          margin-bottom: 1rem !important;
-          cursor: pointer !important;
-        }
-        .cpa-btn-blue:active { transform: scale(0.95) !important; }
       `}} />
 
       <div className="hero-bg"></div>
@@ -203,9 +162,9 @@ export default function UltimateWealthEcosystem() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div>
-                        <label className="block text-[10px] text-slate-400 font-bold uppercase mb-2">Rendimento Annuo (APY)</label>
+                        <label className="block text-[10px] text-slate-400 font-bold uppercase mb-2">Rendimento Annuo Stimato (APY)</label>
                         <div className="relative">
-                          <input type="number" value={apyEtoro || ''} onChange={(e) => setApyEtoro(Number(e.target.value))} className="input-pro input-small pr-6" />
+                          <input type="number" value={apyEtoro || ''} onChange={(e) => setApyEtoro(Number(e.target.value))} className="input-pro pr-6" />
                           <span className="absolute right-0 bottom-3 text-white/50 font-mono">%</span>
                         </div>
                       </div>
@@ -237,10 +196,29 @@ export default function UltimateWealthEcosystem() {
                       </div>
                     </div>
                     
-                    <div className="mt-6 text-center pt-6 border-t border-white/10 relative z-40">
+                    <div className="mt-6 text-center pt-6 border-t border-white/10">
                       
-                      {/* BOTTONE ETORO CON CSS PURO */}
-                      <a href={LINK_ETORO} target="_blank" rel="noopener noreferrer" className="cpa-btn-blue">
+                      {/* BOTTONE ETORO IN-LINE STYLE BOMB-PROOF */}
+                      <a 
+                        href={LINK_ETORO} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          backgroundColor: '#3B82F6',
+                          color: '#FFFFFF',
+                          textAlign: 'center',
+                          padding: '1.25rem 1rem',
+                          borderRadius: '1rem',
+                          fontWeight: '900',
+                          fontSize: '1rem',
+                          textTransform: 'uppercase',
+                          textDecoration: 'none',
+                          boxShadow: '0 8px 25px rgba(59, 130, 246, 0.5)',
+                          marginBottom: '1.5rem'
+                        }}
+                      >
                         CLICCA QUI PER APRIRE ETORO
                       </a>
                       
@@ -296,21 +274,21 @@ export default function UltimateWealthEcosystem() {
                       <div>
                         <label className="block text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase mb-2">Max LTV</label>
                         <div className="relative">
-                          <input type="number" value={maxLtv || ''} onChange={(e) => setMaxLtv(Number(e.target.value))} className="input-pro input-small pr-4" />
+                          <input type="number" value={maxLtv || ''} onChange={(e) => setMaxLtv(Number(e.target.value))} className="input-pro pr-4" style={{fontSize: '1.2rem'}} />
                           <span className="absolute right-0 bottom-2 text-slate-500 font-mono">%</span>
                         </div>
                       </div>
                       <div>
                         <label className="block text-[9px] sm:text-[10px] text-emerald-400 font-bold uppercase mb-2">Rendita (APY)</label>
                         <div className="relative">
-                          <input type="number" value={apyYouHodler || ''} onChange={(e) => setApyYouHodler(Number(e.target.value))} className="input-pro input-small pr-4" />
+                          <input type="number" value={apyYouHodler || ''} onChange={(e) => setApyYouHodler(Number(e.target.value))} className="input-pro pr-4" style={{fontSize: '1.2rem'}} />
                           <span className="absolute right-0 bottom-2 text-slate-500 font-mono">%</span>
                         </div>
                       </div>
                       <div>
                         <label className="block text-[9px] sm:text-[10px] text-rose-400 font-bold uppercase mb-2">Costo (APR)</label>
                         <div className="relative">
-                          <input type="number" value={aprYouHodler || ''} onChange={(e) => setAprYouHodler(Number(e.target.value))} className="input-pro input-small pr-4" />
+                          <input type="number" value={aprYouHodler || ''} onChange={(e) => setAprYouHodler(Number(e.target.value))} className="input-pro pr-4" style={{fontSize: '1.2rem'}} />
                           <span className="absolute right-0 bottom-2 text-slate-500 font-mono">%</span>
                         </div>
                       </div>
@@ -357,16 +335,31 @@ export default function UltimateWealthEcosystem() {
                     
                     <div className="relative z-40 mt-2">
                       
-                      {/* BOTTONE YOUHODLER CON CSS PURO */}
+                      {/* BOTTONE YOUHODLER IN-LINE STYLE BOMB-PROOF */}
                       <a 
                         href={isLombardFattibile && deltaNettoYouHodler >= 0 ? LINK_YOUHODLER : "#"} 
                         target={isLombardFattibile && deltaNettoYouHodler >= 0 ? "_blank" : "_self"}
-                        className={`cpa-btn-green ${(!isLombardFattibile || deltaNettoYouHodler < 0) ? 'disabled' : ''}`}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          backgroundColor: (!isLombardFattibile || deltaNettoYouHodler < 0) ? '#333333' : '#10B981',
+                          color: (!isLombardFattibile || deltaNettoYouHodler < 0) ? '#888888' : '#000000',
+                          textAlign: 'center',
+                          padding: '1.25rem 1rem',
+                          borderRadius: '1rem',
+                          fontWeight: '900',
+                          fontSize: '1rem',
+                          textTransform: 'uppercase',
+                          textDecoration: 'none',
+                          boxShadow: (!isLombardFattibile || deltaNettoYouHodler < 0) ? 'none' : '0 8px 25px rgba(16, 185, 129, 0.5)',
+                          marginBottom: '1.5rem',
+                          pointerEvents: (!isLombardFattibile || deltaNettoYouHodler < 0) ? 'none' : 'auto'
+                        }}
                       >
                         CLICCA QUI PER APRIRE YOUHODLER
                       </a>
 
-                      <div className="text-left bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/10 mt-4">
+                      <div className="text-left bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/10">
                         <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">Come gestire il prestito:</h4>
                         <p className="text-[10px] sm:text-[11px] text-slate-400 font-light leading-relaxed">
                           <strong className="text-white">1. Evita la Liquidazione:</strong> Mantenendo un LTV più basso del 90%, il tuo collaterale è al sicuro anche se il mercato crolla improvvisamente.<br/><br/>
@@ -382,31 +375,6 @@ export default function UltimateWealthEcosystem() {
           </section>
         </div>
       )}
-
-      {/* ========================================================================= */}
-      {/* FLOATING PILL BAR (LA MAGIA MOBILE-SAFE) */}
-      {/* ========================================================================= */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-sm p-3 bg-[#0a0a0a]/95 border border-white/10 z-[9999] md:hidden shadow-[0_20px_40px_rgba(0,0,0,0.9)] rounded-2xl backdrop-blur-xl">
-        <div className="flex gap-3 items-center justify-between">
-          <div className="text-[10px] text-slate-400 font-mono leading-tight pl-2">
-            Stato Algoritmo: <br/>
-            <span className="text-white font-bold">{activeTab === 'starter' ? 'Pronto (eToro)' : 'Pronto (YouHodler)'}</span>
-          </div>
-          {activeTab === 'starter' ? (
-            <a href={LINK_ETORO} target="_blank" rel="noopener noreferrer" className="cpa-btn-blue !mb-0 !py-3 !text-xs !w-auto !flex-1">
-              APRI ETORO
-            </a>
-          ) : (
-            <a 
-              href={isLombardFattibile && deltaNettoYouHodler >= 0 ? LINK_YOUHODLER : "#"} 
-              target={isLombardFattibile && deltaNettoYouHodler >= 0 ? "_blank" : "_self"}
-              className={`cpa-btn-green !mb-0 !py-3 !text-xs !w-auto !flex-1 ${(!isLombardFattibile || deltaNettoYouHodler < 0) ? 'disabled' : ''}`}
-            >
-              APRI YOUHODLER
-            </a>
-          )}
-        </div>
-      </div>
 
     </main>
   );
