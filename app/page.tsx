@@ -41,7 +41,6 @@ export default function UltimateWealthEcosystem() {
       setAprYouHodler(parsed.aprYouHodler || 10.0);
       setActiveTab(parsed.activeTab || 'wealthy');
     }
-    document.documentElement.style.scrollBehavior = 'smooth';
   }, []);
 
   // Salvataggio Automatico
@@ -87,13 +86,14 @@ export default function UltimateWealthEcosystem() {
   if (!isMounted) return null;
 
   return (
-    <main className="min-h-screen bg-[#030303] text-slate-300 font-sans selection:bg-emerald-500/30 overflow-x-hidden pb-32 sm:pb-24 relative">
+    <main className="min-h-screen bg-[#030303] text-slate-300 font-sans selection:bg-emerald-500/30 overflow-x-hidden pb-40 relative">
       
-      {/* STILI AGGIORNATI PER MOBILE & Z-INDEX */}
+      {/* CSS AGGIORNATO E BLINDATO */}
       <style dangerouslySetInnerHTML={{__html: `
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&family=JetBrains+Mono:wght@400;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; background: #030303; }
         .font-mono { font-family: 'JetBrains Mono', monospace; }
+        html { scroll-behavior: smooth; }
         
         .hero-bg { position: absolute; top: -10%; left: 50%; transform: translateX(-50%); width: 120vw; height: 60vh; background: radial-gradient(ellipse at top, rgba(16, 185, 129, 0.15) 0%, transparent 60%); pointer-events: none; z-index: 0; }
         
@@ -105,11 +105,11 @@ export default function UltimateWealthEcosystem() {
         .input-small { font-size: 1.1rem; padding-left: 0.5rem; }
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
-        /* Bottoni blindati per Z-index */
-        .btn-green { position: relative; z-index: 40; display: inline-flex; justify-content: center; align-items: center; background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: #000; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; transition: all 0.2s ease; box-shadow: 0 10px 30px -10px rgba(16, 185, 129, 0.6); border: none; cursor: pointer; text-align: center; }
+        /* Bottoni In-Line SEMPRE visibili */
+        .btn-green { position: relative; z-index: 40; display: flex; justify-content: center; align-items: center; background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: #000; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; transition: all 0.2s ease; box-shadow: 0 10px 30px -10px rgba(16, 185, 129, 0.6); border: none; cursor: pointer; text-align: center; }
         .btn-green:hover { transform: translateY(-3px); box-shadow: 0 15px 40px -10px rgba(16, 185, 129, 0.8); }
         
-        .btn-blue { position: relative; z-index: 40; display: inline-flex; justify-content: center; align-items: center; background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%); color: #fff; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; transition: all 0.2s ease; box-shadow: 0 10px 30px -10px rgba(59, 130, 246, 0.6); border: none; cursor: pointer; text-align: center; }
+        .btn-blue { position: relative; z-index: 40; display: flex; justify-content: center; align-items: center; background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%); color: #fff; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; transition: all 0.2s ease; box-shadow: 0 10px 30px -10px rgba(59, 130, 246, 0.6); border: none; cursor: pointer; text-align: center; }
         .btn-blue:hover { transform: translateY(-3px); box-shadow: 0 15px 40px -10px rgba(59, 130, 246, 0.8); }
 
         .select-pro { background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 0.5rem; padding: 0.5rem; font-size: 0.8rem; outline: none; }
@@ -117,13 +117,12 @@ export default function UltimateWealthEcosystem() {
         .tab-btn { flex: 1; padding: 1rem; border-radius: 1rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; border: 1px solid transparent; }
         .tab-active { background: #fff; color: #000; box-shadow: 0 0 30px rgba(255,255,255,0.2); transform: scale(1.02); z-index: 10; }
         .tab-inactive { background: rgba(255,255,255,0.03); color: #666; border-color: rgba(255,255,255,0.05); }
-        .tab-inactive:hover { background: rgba(255,255,255,0.08); color: #fff; }
       `}} />
 
       <div className="hero-bg"></div>
 
       {/* ========================================================================= */}
-      {/* 1. HOOK INIZIALE */}
+      {/* HOOK INIZIALE */}
       {/* ========================================================================= */}
       <section className="relative z-10 w-full px-4 pt-10 sm:pt-16 pb-10 max-w-[1000px] mx-auto text-center">
         <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full border border-emerald-500/30 text-emerald-400 text-[10px] sm:text-xs font-black uppercase tracking-widest mb-6 bg-emerald-500/10">
@@ -221,16 +220,17 @@ export default function UltimateWealthEcosystem() {
                     </div>
                     
                     <div className="mt-6 text-center pt-6 border-t border-white/10 relative z-40">
-                      {/* TASTO SEMPRE CLICCABILE */}
-                      <a href={LINK_ETORO} target="_blank" rel="noopener noreferrer" className="btn-blue hidden sm:flex w-full py-5 rounded-xl text-sm mb-4">
+                      
+                      {/* TASTO CPA - ORA SEMPRE VISIBILE IN-LINE SU TUTTI I DISPOSITIVI */}
+                      <a href={LINK_ETORO} target="_blank" rel="noopener noreferrer" className="btn-blue w-full py-5 rounded-xl text-sm mb-5 shadow-[0_0_30px_rgba(59,130,246,0.3)]">
                         Attiva Accumulo su eToro
                       </a>
                       
                       <div className="text-left bg-blue-500/5 p-4 rounded-xl border border-blue-500/10">
                         <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Come massimizzare:</h4>
                         <p className="text-[10px] sm:text-[11px] text-slate-400 font-light leading-relaxed">
-                          <strong className="text-white">1. Il segreto del DCA:</strong> Imposta un deposito settimanale o mensile. Acquistando sia quando il mercato sale che quando crolla, abbatti il rischio.<br/><br/>
-                          <strong className="text-white">2. Usa il CopyTrading:</strong> Cerca un investitore d'élite e clicca "Copia". Il tuo portafoglio replicherà in automatico le sue mosse.
+                          <strong className="text-white">1. Il segreto del DCA:</strong> Imposta un deposito ricorrente. Acquistando sia quando il mercato sale che quando crolla, abbatti il rischio.<br/><br/>
+                          <strong className="text-white">2. Usa il CopyTrading:</strong> Cerca un investitore d'élite e clicca "Copia". Il tuo conto replicherà in automatico le sue mosse.
                         </p>
                       </div>
                     </div>
@@ -251,7 +251,7 @@ export default function UltimateWealthEcosystem() {
             <div className="glass-box p-5 sm:p-10 border-t-4 border-t-emerald-500">
               <div className="mb-8 text-center lg:text-left">
                 <h2 className="text-2xl sm:text-3xl font-black text-white mb-2">Terminale di Estrazione</h2>
-                <p className="text-sm text-slate-400 font-light">Vuoi fare un acquisto importante? Usa il tuo capitale come scudo per farti prestare i contanti istantaneamente, senza controlli.</p>
+                <p className="text-sm text-slate-400 font-light">Usa il tuo capitale come scudo per farti prestare i contanti istantaneamente, senza controlli CRIF.</p>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
@@ -304,7 +304,6 @@ export default function UltimateWealthEcosystem() {
                 <div className="lg:col-span-5 relative z-20">
                   <div className="bg-[#050810] border border-emerald-500/20 rounded-2xl p-5 sm:p-8 h-full flex flex-col justify-between relative overflow-hidden">
                     
-                    {/* CONTAINER DATI (L'Overlay si applica solo qui) */}
                     <div className="relative flex-1">
                       {!isLombardFattibile && (
                         <div className="absolute inset-0 bg-black/95 backdrop-blur-md z-30 flex flex-col items-center justify-center p-4 text-center rounded-xl border border-rose-500/30">
@@ -331,7 +330,7 @@ export default function UltimateWealthEcosystem() {
                       
                       <div className="mt-6 pt-4 border-t border-white/10 mb-4">
                         <div className="flex justify-between items-end text-left">
-                          <span className="font-black text-white text-[11px] uppercase tracking-widest">Saldo Netto Netto</span>
+                          <span className="font-black text-white text-[11px] uppercase tracking-widest">Saldo Netto Annuo</span>
                           <span className={`font-mono font-black text-3xl sm:text-4xl ${deltaNettoYouHodler >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {(deltaNettoYouHodler > 0 ? "+" : "") + "€" + deltaNettoYouHodler.toFixed(0)}
                           </span>
@@ -339,21 +338,21 @@ export default function UltimateWealthEcosystem() {
                       </div>
                     </div>
                     
-                    {/* ZONA INFERIORE: BOTTONE (Sempre fuori dall'overlay) */}
-                    <div className="relative z-40">
+                    <div className="relative z-40 mt-2">
+                      {/* TASTO CPA - ORA SEMPRE VISIBILE IN-LINE SU TUTTI I DISPOSITIVI */}
                       <a 
                         href={isLombardFattibile && deltaNettoYouHodler >= 0 ? LINK_YOUHODLER : "#"} 
                         target={isLombardFattibile && deltaNettoYouHodler >= 0 ? "_blank" : "_self"}
-                        className={`btn-green hidden sm:flex w-full py-5 rounded-xl text-sm mb-4 ${(!isLombardFattibile || deltaNettoYouHodler < 0) && 'opacity-50 grayscale cursor-not-allowed'}`}
+                        className={`btn-green w-full py-5 rounded-xl text-sm mb-5 shadow-[0_0_30px_rgba(16,185,129,0.3)] ${(!isLombardFattibile || deltaNettoYouHodler < 0) && 'opacity-40 grayscale cursor-not-allowed'}`}
                       >
-                        Avvia Estrazione su YouHodler
+                        Avvia Estrazione YouHodler
                       </a>
 
                       <div className="text-left bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/10">
                         <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">Come gestire il prestito:</h4>
                         <p className="text-[10px] sm:text-[11px] text-slate-400 font-light leading-relaxed">
-                          <strong className="text-white">1. Evita la Liquidazione:</strong> Non usare tutto il margine. Mantenendo un LTV più basso del 90%, il tuo collaterale è al sicuro anche se il mercato crolla.<br/><br/>
-                          <strong className="text-white">2. Rate Invisibili:</strong> Non pagare la rata mensile con i tuoi soldi! Lascia che la rendita del 12% copra il prestito in background.
+                          <strong className="text-white">1. Evita la Liquidazione:</strong> Mantenendo un LTV più basso del 90%, il tuo collaterale è al sicuro anche se il mercato crolla improvvisamente.<br/><br/>
+                          <strong className="text-white">2. Rate Invisibili:</strong> Non estinguere mai la rata mensile con i tuoi soldi dal conto corrente! Lascia che la rendita del collaterale copra il prestito in automatico al posto tuo.
                         </p>
                       </div>
                     </div>
@@ -367,21 +366,25 @@ export default function UltimateWealthEcosystem() {
       )}
 
       {/* ========================================================================= */}
-      {/* STICKY MOBILE CTA BAR (LA MAGIA PER TELEFONO) */}
+      {/* BARRA STICKY EXTRA PER SICUREZZA (OPZIONALE MA EFFICACE) */}
       {/* ========================================================================= */}
-      <div className="fixed bottom-0 left-0 w-full px-4 pt-6 pb-6 bg-gradient-to-t from-[#02050A] via-[#02050A]/95 to-transparent z-[100] md:hidden flex justify-center backdrop-blur-sm pointer-events-none">
-        <div className="w-full max-w-md pointer-events-auto">
+      <div className="fixed bottom-0 left-0 w-full p-4 bg-[#030303]/95 border-t border-white/10 z-[9999] md:hidden shadow-[0_-10px_30px_rgba(0,0,0,0.8)] pb-8 backdrop-blur-md">
+        <div className="w-full max-w-md mx-auto flex gap-3 items-center justify-between">
+          <div className="text-[10px] text-slate-400 font-mono leading-tight">
+            Strategia Calcolata: <br/>
+            <span className="text-white font-bold">{activeTab === 'starter' ? 'Accumulo' : 'Estrazione'}</span>
+          </div>
           {activeTab === 'starter' ? (
-            <a href={LINK_ETORO} target="_blank" rel="noopener noreferrer" className="btn-blue w-full py-4 rounded-xl text-sm flex">
-              Attiva Accumulo su eToro
+            <a href={LINK_ETORO} target="_blank" rel="noopener noreferrer" className="btn-blue px-6 py-3 rounded-lg text-xs w-2/3">
+              Applica Ora
             </a>
           ) : (
             <a 
               href={isLombardFattibile && deltaNettoYouHodler >= 0 ? LINK_YOUHODLER : "#"} 
               target={isLombardFattibile && deltaNettoYouHodler >= 0 ? "_blank" : "_self"}
-              className={`btn-green w-full py-4 rounded-xl text-sm flex ${(!isLombardFattibile || deltaNettoYouHodler < 0) && 'opacity-40 grayscale cursor-not-allowed'}`}
+              className={`btn-green px-6 py-3 rounded-lg text-xs w-2/3 ${(!isLombardFattibile || deltaNettoYouHodler < 0) && 'opacity-40 grayscale cursor-not-allowed'}`}
             >
-              Avvia Estrazione YouHodler
+              Applica Ora
             </a>
           )}
         </div>
