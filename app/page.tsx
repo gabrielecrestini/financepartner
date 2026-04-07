@@ -9,24 +9,23 @@ export default function UltimateWealthEcosystem() {
   const [isMounted, setIsMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<'wealthy' | 'starter'>('wealthy');
   
-  // Parametri eToro (Parto da zero)
+  // Parametri eToro
   const [capitaleIniziale, setCapitaleIniziale] = useState<number>(0);
   const [deposito, setDeposito] = useState<number>(200);
-  const [frequenza, setFrequenza] = useState<number>(12); // 12 = Mensile
+  const [frequenza, setFrequenza] = useState<number>(12);
   const [anni, setAnni] = useState<number>(10);
   const [apyEtoro, setApyEtoro] = useState<number>(15.0);
 
-  // Parametri YouHodler (Ho dei risparmi)
+  // Parametri YouHodler
   const [spesa, setSpesa] = useState<number>(2500);
   const [capitale, setCapitale] = useState<number>(8000);
   const [maxLtv, setMaxLtv] = useState<number>(90); 
   const [apyYouHodler, setApyYouHodler] = useState<number>(12.0); 
   const [aprYouHodler, setAprYouHodler] = useState<number>(10.0); 
 
-  // Caricamento Dati Salvati
   useEffect(() => {
     setIsMounted(true);
-    const savedData = localStorage.getItem('partnerVestWealthDataV3');
+    const savedData = localStorage.getItem('partnerVestWealthDataV4');
     if (savedData) {
       const parsed = JSON.parse(savedData);
       setCapitaleIniziale(parsed.capitaleIniziale || 0);
@@ -43,35 +42,27 @@ export default function UltimateWealthEcosystem() {
     }
   }, []);
 
-  // Salvataggio Automatico
   useEffect(() => {
     if (isMounted) {
-      localStorage.setItem('partnerVestWealthDataV3', JSON.stringify({
+      localStorage.setItem('partnerVestWealthDataV4', JSON.stringify({
         capitaleIniziale, deposito, frequenza, anni, apyEtoro, spesa, capitale, maxLtv, apyYouHodler, aprYouHodler, activeTab
       }));
     }
   }, [capitaleIniziale, deposito, frequenza, anni, apyEtoro, spesa, capitale, maxLtv, apyYouHodler, aprYouHodler, activeTab, isMounted]);
 
-  // ==========================================================
   // LOGICA MATEMATICA: eToro
-  // ==========================================================
   const n_periodi = anni * frequenza;
   const tasso_periodo = (apyEtoro / 100) / frequenza;
-  
   const FV_iniziale = capitaleIniziale * Math.pow(1 + tasso_periodo, n_periodi);
   const FV_depositi = deposito * ((Math.pow(1 + tasso_periodo, n_periodi) - 1) / tasso_periodo);
-  
   const capitaleFinaleEtoro = FV_iniziale + FV_depositi;
   const totaleVersatoEtoro = capitaleIniziale + (deposito * n_periodi);
   const profittoGeneratoEtoro = capitaleFinaleEtoro - totaleVersatoEtoro;
 
-  // ==========================================================
   // LOGICA MATEMATICA: YouHodler
-  // ==========================================================
   const LTV_DECIMAL = maxLtv / 100;
   const APY_Y_DECIMAL = apyYouHodler / 100;
   const APR_Y_DECIMAL = aprYouHodler / 100;
-
   const collateraleRichiesto = spesa / LTV_DECIMAL;
   const capitaleLibero = capitale - collateraleRichiesto;
   const costoPrestitoAnnuo = spesa * APR_Y_DECIMAL;
@@ -79,7 +70,7 @@ export default function UltimateWealthEcosystem() {
   const deltaNettoYouHodler = renditaAnnua - costoPrestitoAnnuo;
   const isLombardFattibile = (spesa / capitale) <= LTV_DECIMAL && capitale > 0 && spesa > 0;
 
-  // I TUOI LINK AFFILIATO S2S
+  // LINK FINANCEADS
   const LINK_ETORO = "https://www.financeads.net/tc.php?t=80001C110660650T";
   const LINK_YOUHODLER = "https://www.financeads.net/tc.php?t=80001C324060796T";
 
@@ -88,7 +79,7 @@ export default function UltimateWealthEcosystem() {
   return (
     <main className="min-h-screen bg-[#030303] text-slate-300 font-sans selection:bg-emerald-500/30 overflow-x-hidden pb-40 relative">
       
-      {/* CSS AGGIORNATO E RIPULITO */}
+      {/* CSS PURO PER FORZARE I BOTTONI CPA */}
       <style dangerouslySetInnerHTML={{__html: `
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&family=JetBrains+Mono:wght@400;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; background: #030303; }
@@ -98,18 +89,53 @@ export default function UltimateWealthEcosystem() {
         .hero-bg { position: absolute; top: -10%; left: 50%; transform: translateX(-50%); width: 120vw; height: 60vh; background: radial-gradient(ellipse at top, rgba(16, 185, 129, 0.15) 0%, transparent 60%); pointer-events: none; z-index: 0; }
         
         .glass-box { background: rgba(12, 12, 12, 0.7); backdrop-filter: blur(24px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 1.5rem; transition: border-color 0.3s ease; }
-        .glass-box:hover { border-color: rgba(16, 185, 129, 0.2); }
-        
         .input-pro { width: 100%; background: transparent; border: none; border-bottom: 2px solid rgba(255,255,255,0.1); color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; font-weight: 800; padding: 0.5rem 0 0.5rem 2rem; outline: none; transition: all 0.3s ease; }
         .input-pro:focus { border-bottom-color: #10B981; }
-        .input-small { font-size: 1.1rem; padding-left: 0.5rem; }
-        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-
         .select-pro { background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 0.5rem; padding: 0.5rem; font-size: 0.8rem; outline: none; }
 
-        .tab-btn { flex: 1; padding: 1rem; border-radius: 1rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; border: 1px solid transparent; }
+        .tab-btn { flex: 1; padding: 1rem; border-radius: 1rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; border: 1px solid transparent; text-align: center; }
         .tab-active { background: #fff; color: #000; box-shadow: 0 0 30px rgba(255,255,255,0.2); transform: scale(1.02); z-index: 10; }
         .tab-inactive { background: rgba(255,255,255,0.03); color: #666; border-color: rgba(255,255,255,0.05); }
+        
+        /* CLASSI INDISTRUTTIBILI PER I BOTTONI CPA */
+        .cpa-btn-green {
+          display: block !important;
+          width: 100% !important;
+          background-color: #10B981 !important;
+          color: #000000 !important;
+          text-align: center !important;
+          padding: 1.5rem 1rem !important;
+          border-radius: 1rem !important;
+          font-weight: 900 !important;
+          font-size: 1.1rem !important;
+          text-transform: uppercase !important;
+          text-decoration: none !important;
+          box-shadow: 0 8px 25px rgba(16, 185, 129, 0.5) !important;
+          transition: transform 0.2s ease !important;
+          margin-bottom: 1rem !important;
+          cursor: pointer !important;
+        }
+        .cpa-btn-green:active { transform: scale(0.95) !important; }
+        .cpa-btn-green.disabled { background-color: #333333 !important; color: #888888 !important; box-shadow: none !important; pointer-events: none !important; }
+
+        .cpa-btn-blue {
+          display: block !important;
+          width: 100% !important;
+          background-color: #3B82F6 !important;
+          color: #ffffff !important;
+          text-align: center !important;
+          padding: 1.5rem 1rem !important;
+          border-radius: 1rem !important;
+          font-weight: 900 !important;
+          font-size: 1.1rem !important;
+          text-transform: uppercase !important;
+          text-decoration: none !important;
+          box-shadow: 0 8px 25px rgba(59, 130, 246, 0.5) !important;
+          transition: transform 0.2s ease !important;
+          margin-bottom: 1rem !important;
+          cursor: pointer !important;
+        }
+        .cpa-btn-blue:active { transform: scale(0.95) !important; }
       `}} />
 
       <div className="hero-bg"></div>
@@ -177,7 +203,7 @@ export default function UltimateWealthEcosystem() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       <div>
-                        <label className="block text-[10px] text-slate-400 font-bold uppercase mb-2">Rendimento Annuo Stimato (APY)</label>
+                        <label className="block text-[10px] text-slate-400 font-bold uppercase mb-2">Rendimento Annuo (APY)</label>
                         <div className="relative">
                           <input type="number" value={apyEtoro || ''} onChange={(e) => setApyEtoro(Number(e.target.value))} className="input-pro input-small pr-6" />
                           <span className="absolute right-0 bottom-3 text-white/50 font-mono">%</span>
@@ -192,7 +218,6 @@ export default function UltimateWealthEcosystem() {
                   </div>
                 </div>
 
-                {/* OUTPUT & CPA ETORO */}
                 <div className="lg:col-span-5 relative z-20">
                   <div className="bg-[#050810] border border-blue-500/20 rounded-2xl p-5 sm:p-8 h-full flex flex-col justify-between">
                     <div>
@@ -214,17 +239,12 @@ export default function UltimateWealthEcosystem() {
                     
                     <div className="mt-6 text-center pt-6 border-t border-white/10 relative z-40">
                       
-                      {/* TASTO CPA - ORA PURO TAILWIND CSS, SEMPRE VISIBILE */}
-                      <a 
-                        href={LINK_ETORO} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="relative z-40 flex justify-center items-center w-full py-5 rounded-xl text-sm font-black uppercase tracking-widest text-white bg-gradient-to-r from-blue-500 to-blue-700 shadow-[0_10px_30px_-10px_rgba(59,130,246,0.6)] transition-transform active:scale-95 mb-5 hover:-translate-y-1"
-                      >
-                        Attiva Accumulo su eToro
+                      {/* BOTTONE ETORO CON CSS PURO */}
+                      <a href={LINK_ETORO} target="_blank" rel="noopener noreferrer" className="cpa-btn-blue">
+                        CLICCA QUI PER APRIRE ETORO
                       </a>
                       
-                      <div className="text-left bg-blue-500/5 p-4 rounded-xl border border-blue-500/10">
+                      <div className="text-left bg-blue-500/5 p-4 rounded-xl border border-blue-500/10 mt-4">
                         <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">Come massimizzare:</h4>
                         <p className="text-[10px] sm:text-[11px] text-slate-400 font-light leading-relaxed">
                           <strong className="text-white">1. Il segreto del DCA:</strong> Imposta un deposito ricorrente. Acquistando sia quando il mercato sale che quando crolla, abbatti il rischio.<br/><br/>
@@ -298,7 +318,6 @@ export default function UltimateWealthEcosystem() {
                   </div>
                 </div>
 
-                {/* OUTPUT YOUHODLER */}
                 <div className="lg:col-span-5 relative z-20">
                   <div className="bg-[#050810] border border-emerald-500/20 rounded-2xl p-5 sm:p-8 h-full flex flex-col justify-between relative overflow-hidden">
                     
@@ -337,16 +356,17 @@ export default function UltimateWealthEcosystem() {
                     </div>
                     
                     <div className="relative z-40 mt-2">
-                      {/* TASTO CPA - ORA PURO TAILWIND CSS, SEMPRE VISIBILE */}
+                      
+                      {/* BOTTONE YOUHODLER CON CSS PURO */}
                       <a 
                         href={isLombardFattibile && deltaNettoYouHodler >= 0 ? LINK_YOUHODLER : "#"} 
                         target={isLombardFattibile && deltaNettoYouHodler >= 0 ? "_blank" : "_self"}
-                        className={`relative z-40 flex justify-center items-center w-full py-5 rounded-xl text-sm font-black uppercase tracking-widest text-black bg-gradient-to-r from-emerald-400 to-emerald-600 shadow-[0_10px_30px_-10px_rgba(16,185,129,0.6)] transition-transform active:scale-95 mb-5 ${(!isLombardFattibile || deltaNettoYouHodler < 0) ? 'opacity-40 grayscale cursor-not-allowed' : 'hover:-translate-y-1'}`}
+                        className={`cpa-btn-green ${(!isLombardFattibile || deltaNettoYouHodler < 0) ? 'disabled' : ''}`}
                       >
-                        Applica su YouHodler
+                        CLICCA QUI PER APRIRE YOUHODLER
                       </a>
 
-                      <div className="text-left bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/10">
+                      <div className="text-left bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/10 mt-4">
                         <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-2">Come gestire il prestito:</h4>
                         <p className="text-[10px] sm:text-[11px] text-slate-400 font-light leading-relaxed">
                           <strong className="text-white">1. Evita la Liquidazione:</strong> Mantenendo un LTV più basso del 90%, il tuo collaterale è al sicuro anche se il mercato crolla improvvisamente.<br/><br/>
@@ -366,23 +386,23 @@ export default function UltimateWealthEcosystem() {
       {/* ========================================================================= */}
       {/* FLOATING PILL BAR (LA MAGIA MOBILE-SAFE) */}
       {/* ========================================================================= */}
-      <div className="fixed bottom-6 left-4 right-4 p-3 bg-[#0a0a0a]/95 border border-white/10 z-[9999] md:hidden shadow-[0_20px_40px_rgba(0,0,0,0.9)] rounded-2xl backdrop-blur-xl">
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-sm p-3 bg-[#0a0a0a]/95 border border-white/10 z-[9999] md:hidden shadow-[0_20px_40px_rgba(0,0,0,0.9)] rounded-2xl backdrop-blur-xl">
         <div className="flex gap-3 items-center justify-between">
           <div className="text-[10px] text-slate-400 font-mono leading-tight pl-2">
             Stato Algoritmo: <br/>
             <span className="text-white font-bold">{activeTab === 'starter' ? 'Pronto (eToro)' : 'Pronto (YouHodler)'}</span>
           </div>
           {activeTab === 'starter' ? (
-            <a href={LINK_ETORO} target="_blank" rel="noopener noreferrer" className="flex justify-center items-center px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest text-white bg-gradient-to-r from-blue-500 to-blue-700 shadow-[0_0_20px_rgba(59,130,246,0.4)] w-1/2">
-              Applica Ora
+            <a href={LINK_ETORO} target="_blank" rel="noopener noreferrer" className="cpa-btn-blue !mb-0 !py-3 !text-xs !w-auto !flex-1">
+              APRI ETORO
             </a>
           ) : (
             <a 
               href={isLombardFattibile && deltaNettoYouHodler >= 0 ? LINK_YOUHODLER : "#"} 
               target={isLombardFattibile && deltaNettoYouHodler >= 0 ? "_blank" : "_self"}
-              className={`flex justify-center items-center px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest text-black bg-gradient-to-r from-emerald-400 to-emerald-600 shadow-[0_0_20px_rgba(16,185,129,0.4)] w-1/2 ${(!isLombardFattibile || deltaNettoYouHodler < 0) ? 'opacity-40 grayscale cursor-not-allowed' : ''}`}
+              className={`cpa-btn-green !mb-0 !py-3 !text-xs !w-auto !flex-1 ${(!isLombardFattibile || deltaNettoYouHodler < 0) ? 'disabled' : ''}`}
             >
-              Applica Ora
+              APRI YOUHODLER
             </a>
           )}
         </div>
