@@ -88,7 +88,7 @@ export default function UltimateWealthEcosystem() {
   return (
     <main className="min-h-screen bg-[#030303] text-slate-300 font-sans selection:bg-emerald-500/30 overflow-x-hidden pb-40 relative">
       
-      {/* CSS AGGIORNATO E BLINDATO */}
+      {/* CSS AGGIORNATO E RIPULITO */}
       <style dangerouslySetInnerHTML={{__html: `
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&family=JetBrains+Mono:wght@400;700;800&display=swap');
         body { font-family: 'Inter', sans-serif; background: #030303; }
@@ -104,13 +104,6 @@ export default function UltimateWealthEcosystem() {
         .input-pro:focus { border-bottom-color: #10B981; }
         .input-small { font-size: 1.1rem; padding-left: 0.5rem; }
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-
-        /* Bottoni In-Line SEMPRE visibili */
-        .btn-green { position: relative; z-index: 40; display: flex; justify-content: center; align-items: center; background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: #000; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; transition: all 0.2s ease; box-shadow: 0 10px 30px -10px rgba(16, 185, 129, 0.6); border: none; cursor: pointer; text-align: center; }
-        .btn-green:hover { transform: translateY(-3px); box-shadow: 0 15px 40px -10px rgba(16, 185, 129, 0.8); }
-        
-        .btn-blue { position: relative; z-index: 40; display: flex; justify-content: center; align-items: center; background: linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%); color: #fff; font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; transition: all 0.2s ease; box-shadow: 0 10px 30px -10px rgba(59, 130, 246, 0.6); border: none; cursor: pointer; text-align: center; }
-        .btn-blue:hover { transform: translateY(-3px); box-shadow: 0 15px 40px -10px rgba(59, 130, 246, 0.8); }
 
         .select-pro { background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 0.5rem; padding: 0.5rem; font-size: 0.8rem; outline: none; }
 
@@ -221,8 +214,13 @@ export default function UltimateWealthEcosystem() {
                     
                     <div className="mt-6 text-center pt-6 border-t border-white/10 relative z-40">
                       
-                      {/* TASTO CPA - ORA SEMPRE VISIBILE IN-LINE SU TUTTI I DISPOSITIVI */}
-                      <a href={LINK_ETORO} target="_blank" rel="noopener noreferrer" className="btn-blue w-full py-5 rounded-xl text-sm mb-5 shadow-[0_0_30px_rgba(59,130,246,0.3)]">
+                      {/* TASTO CPA - ORA PURO TAILWIND CSS, SEMPRE VISIBILE */}
+                      <a 
+                        href={LINK_ETORO} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="relative z-40 flex justify-center items-center w-full py-5 rounded-xl text-sm font-black uppercase tracking-widest text-white bg-gradient-to-r from-blue-500 to-blue-700 shadow-[0_10px_30px_-10px_rgba(59,130,246,0.6)] transition-transform active:scale-95 mb-5 hover:-translate-y-1"
+                      >
                         Attiva Accumulo su eToro
                       </a>
                       
@@ -300,7 +298,7 @@ export default function UltimateWealthEcosystem() {
                   </div>
                 </div>
 
-                {/* OUTPUT YOUHODLER CON OVERLAY CORRETTO */}
+                {/* OUTPUT YOUHODLER */}
                 <div className="lg:col-span-5 relative z-20">
                   <div className="bg-[#050810] border border-emerald-500/20 rounded-2xl p-5 sm:p-8 h-full flex flex-col justify-between relative overflow-hidden">
                     
@@ -339,13 +337,13 @@ export default function UltimateWealthEcosystem() {
                     </div>
                     
                     <div className="relative z-40 mt-2">
-                      {/* TASTO CPA - ORA SEMPRE VISIBILE IN-LINE SU TUTTI I DISPOSITIVI */}
+                      {/* TASTO CPA - ORA PURO TAILWIND CSS, SEMPRE VISIBILE */}
                       <a 
                         href={isLombardFattibile && deltaNettoYouHodler >= 0 ? LINK_YOUHODLER : "#"} 
                         target={isLombardFattibile && deltaNettoYouHodler >= 0 ? "_blank" : "_self"}
-                        className={`btn-green w-full py-5 rounded-xl text-sm mb-5 shadow-[0_0_30px_rgba(16,185,129,0.3)] ${(!isLombardFattibile || deltaNettoYouHodler < 0) && 'opacity-40 grayscale cursor-not-allowed'}`}
+                        className={`relative z-40 flex justify-center items-center w-full py-5 rounded-xl text-sm font-black uppercase tracking-widest text-black bg-gradient-to-r from-emerald-400 to-emerald-600 shadow-[0_10px_30px_-10px_rgba(16,185,129,0.6)] transition-transform active:scale-95 mb-5 ${(!isLombardFattibile || deltaNettoYouHodler < 0) ? 'opacity-40 grayscale cursor-not-allowed' : 'hover:-translate-y-1'}`}
                       >
-                        Avvia Estrazione YouHodler
+                        Applica su YouHodler
                       </a>
 
                       <div className="text-left bg-emerald-500/5 p-4 rounded-xl border border-emerald-500/10">
@@ -366,23 +364,23 @@ export default function UltimateWealthEcosystem() {
       )}
 
       {/* ========================================================================= */}
-      {/* BARRA STICKY EXTRA PER SICUREZZA (OPZIONALE MA EFFICACE) */}
+      {/* FLOATING PILL BAR (LA MAGIA MOBILE-SAFE) */}
       {/* ========================================================================= */}
-      <div className="fixed bottom-0 left-0 w-full p-4 bg-[#030303]/95 border-t border-white/10 z-[9999] md:hidden shadow-[0_-10px_30px_rgba(0,0,0,0.8)] pb-8 backdrop-blur-md">
-        <div className="w-full max-w-md mx-auto flex gap-3 items-center justify-between">
-          <div className="text-[10px] text-slate-400 font-mono leading-tight">
-            Strategia Calcolata: <br/>
-            <span className="text-white font-bold">{activeTab === 'starter' ? 'Accumulo' : 'Estrazione'}</span>
+      <div className="fixed bottom-6 left-4 right-4 p-3 bg-[#0a0a0a]/95 border border-white/10 z-[9999] md:hidden shadow-[0_20px_40px_rgba(0,0,0,0.9)] rounded-2xl backdrop-blur-xl">
+        <div className="flex gap-3 items-center justify-between">
+          <div className="text-[10px] text-slate-400 font-mono leading-tight pl-2">
+            Stato Algoritmo: <br/>
+            <span className="text-white font-bold">{activeTab === 'starter' ? 'Pronto (eToro)' : 'Pronto (YouHodler)'}</span>
           </div>
           {activeTab === 'starter' ? (
-            <a href={LINK_ETORO} target="_blank" rel="noopener noreferrer" className="btn-blue px-6 py-3 rounded-lg text-xs w-2/3">
+            <a href={LINK_ETORO} target="_blank" rel="noopener noreferrer" className="flex justify-center items-center px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest text-white bg-gradient-to-r from-blue-500 to-blue-700 shadow-[0_0_20px_rgba(59,130,246,0.4)] w-1/2">
               Applica Ora
             </a>
           ) : (
             <a 
               href={isLombardFattibile && deltaNettoYouHodler >= 0 ? LINK_YOUHODLER : "#"} 
               target={isLombardFattibile && deltaNettoYouHodler >= 0 ? "_blank" : "_self"}
-              className={`btn-green px-6 py-3 rounded-lg text-xs w-2/3 ${(!isLombardFattibile || deltaNettoYouHodler < 0) && 'opacity-40 grayscale cursor-not-allowed'}`}
+              className={`flex justify-center items-center px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest text-black bg-gradient-to-r from-emerald-400 to-emerald-600 shadow-[0_0_20px_rgba(16,185,129,0.4)] w-1/2 ${(!isLombardFattibile || deltaNettoYouHodler < 0) ? 'opacity-40 grayscale cursor-not-allowed' : ''}`}
             >
               Applica Ora
             </a>
