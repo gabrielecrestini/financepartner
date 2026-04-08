@@ -311,7 +311,7 @@ export default function ProtocolloSoftware() {
                     </tr>
                   ))}
                   {leads.length === 0 && (
-                    <tr><td colSpan="5" className="p-8 text-center text-slate-500">Nessun utente registrato nel database.</td></tr>
+         <tr><td colSpan={5} className="p-8 text-center text-slate-500">Nessun utente registrato nel database.</td></tr>
                   )}
                 </tbody>
               </table>
