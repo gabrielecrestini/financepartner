@@ -2,7 +2,17 @@
 
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { ShieldAlert, Activity, Lock, CheckCircle, ArrowRight, Settings, Unlock, RefreshCw, AlertTriangle, LineChart, Shield, Users, Repeat, TrendingUp, Linkedin, Send, Database, Check, X, LogOut, BookOpen } from 'lucide-react';
+// ATTENZIONE: 'Linkedin' rimosso dall'importazione di lucide-react
+import { ShieldAlert, Activity, Lock, CheckCircle, ArrowRight, Settings, Unlock, RefreshCw, AlertTriangle, LineChart, Shield, Users, Repeat, TrendingUp, Send, Database, Check, X, LogOut, BookOpen } from 'lucide-react';
+
+// Il nostro componente Custom SVG per bypassare la rimozione dei brand da Lucide
+const LinkedinIcon = ({ size = 24, className = "" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
+    <rect x="2" y="9" width="4" height="12" />
+    <circle cx="4" cy="4" r="2" />
+  </svg>
+);
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL,
@@ -246,7 +256,7 @@ export default function ProtocolloSoftware() {
         )}
 
         {/* =========================================================
-            PANNELLO ADMIN SEGRETO (Solo se email === ADMIN_EMAIL)
+            PANNELLO ADMIN SEGRETO
             ========================================================= */}
         {step === 4 && isAdmin && (
           <div className="bg-slate-900 rounded-3xl border border-cyan-500/50 p-6 sm:p-8 shadow-2xl animate-in zoom-in-95 w-full">
@@ -382,10 +392,10 @@ export default function ProtocolloSoftware() {
                     <Users size={20}/> War Room (Chat)
                   </button>
 
-                  {/* Pulsante Linkedin e Disconnessione */}
+                  {/* Pulsante Linkedin Custom e Disconnessione */}
                   <div className="mt-auto pt-8 flex flex-col gap-3">
                     <a href="TUO_LINK_LINKEDIN" target="_blank" className="p-4 rounded-xl bg-[#0A66C2]/10 border border-[#0A66C2]/30 text-[#0A66C2] font-bold flex items-center justify-center gap-2 hover:bg-[#0A66C2]/20 transition-all">
-                      <Linkedin size={20}/> Rete Ufficiale
+                      <LinkedinIcon size={20}/> Rete Ufficiale
                     </a>
                     <button onClick={handleLogout} className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-500 font-bold flex items-center justify-center gap-2 hover:bg-slate-800 hover:text-slate-300 transition-all text-sm">
                       <LogOut size={16}/> Disconnetti
