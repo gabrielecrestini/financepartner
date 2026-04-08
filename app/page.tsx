@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-// ATTENZIONE: 'Linkedin' rimosso dall'importazione di lucide-react
+// 'Linkedin' rimosso per bypassare il problema di lucide-react v1
 import { ShieldAlert, Activity, Lock, CheckCircle, ArrowRight, Settings, Unlock, RefreshCw, AlertTriangle, LineChart, Shield, Users, Repeat, TrendingUp, Send, Database, Check, X, LogOut, BookOpen } from 'lucide-react';
 
-// Il nostro componente Custom SVG per bypassare la rimozione dei brand da Lucide
+// Componente Custom SVG per l'icona di LinkedIn
 const LinkedinIcon = ({ size = 24, className = "" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
@@ -14,10 +14,11 @@ const LinkedinIcon = ({ size = 24, className = "" }) => (
   </svg>
 );
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
-);
+// FIX TYPESCRIPT: Forziamo il tipo stringa per evitare errori di compilazione su Netlify
+const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || '') as string;
+const supabaseKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '') as string;
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // La TUA email segreta per sbloccare il pannello Admin (dal file .env)
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL;
@@ -41,12 +42,12 @@ export default function ProtocolloSoftware() {
   
   // Piattaforma VIP
   const [vipTab, setVipTab] = useState('dashboard');
-  const [chatMessages, setChatMessages] = useState([]);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
 
   // Stato Admin
   const isAdmin = email === ADMIN_EMAIL && email !== undefined && email !== '';
-  const [leads, setLeads] = useState([]);
+  const [leads, setLeads] = useState<any[]>([]);
 
   // Link Affiliati Reali
   const LINK_ETORO = "https://www.financeads.net/tc.php?t=80001C110660650T";
@@ -86,12 +87,12 @@ export default function ProtocolloSoftware() {
     if (data) setLeads(data);
   };
 
-  const approveUser = async (userEmail) => {
+  const approveUser = async (userEmail: string) => {
     await supabase.from('finance_leads').update({ status: 'verified' }).eq('email', userEmail);
     fetchLeads(); 
   };
 
-  const checkVerification = async (userEmail, showLoading = true) => {
+  const checkVerification = async (userEmail: string, showLoading = true) => {
     if (showLoading) setIsChecking(true);
     const { data } = await supabase.from('finance_leads').select('status').eq('email', userEmail).single();
     
@@ -121,7 +122,7 @@ export default function ProtocolloSoftware() {
     if (data) setChatMessages(data);
   };
 
-  const sendChatMessage = async (e) => {
+  const sendChatMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
     await supabase.from('finance_chat').insert([{ user_email: email, message: newMessage }]);
@@ -137,12 +138,12 @@ export default function ProtocolloSoftware() {
     }
   }, [node1Clicked, node2Clicked, userStatus, email, isAdmin]);
 
-  const handleNodeClick = (nodeNumber) => {
+  const handleNodeClick = (nodeNumber: number) => {
     if (nodeNumber === 1) { setNode1Clicked(true); localStorage.setItem('ps_node1', 'true'); } 
     else { setNode2Clicked(true); localStorage.setItem('ps_node2', 'true'); }
   };
 
-  const handleAnalysis = async (e) => {
+  const handleAnalysis = async (e: React.FormEvent) => {
     e.preventDefault();
     setStep(3);
     
@@ -248,6 +249,7 @@ export default function ProtocolloSoftware() {
             <h3 className="text-xl font-bold text-white mb-4">Compilazione Ambiente...</h3>
             <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden mb-4"><div className="bg-cyan-500 h-full" style={{ width: `${progress}%` }}></div></div>
             <p className="text-xs text-slate-500 font-mono text-left bg-slate-950 p-4 rounded-xl border border-slate-800">
+              {/* FIX JSX: Utilizzo di &gt; invece di > */}
               {progress < 40 && "&gt; Costruzione matrice di calcolo..."}
               {progress >= 40 && progress < 80 && "&gt; Collegamento API Nodi di ancoraggio..."}
               {progress >= 80 && <span className="text-emerald-400">&gt; Sicurezza stabilita. Sblocco in corso.</span>}
@@ -462,6 +464,7 @@ export default function ProtocolloSoftware() {
                     <div className="animate-in fade-in">
                       <h2 className="text-3xl font-bold text-white mb-6 flex items-center gap-3"><Repeat className="text-indigo-400"/> Leva via Prestiti (Avanzato)</h2>
                       <div className="bg-rose-500/10 border border-rose-500/30 p-6 rounded-xl mb-6">
+                        {/* FIX JSX: Utilizzo di &gt; invece di > */}
                         <h4 className="text-rose-400 font-bold flex items-center gap-2 mb-2"><ShieldAlert size={18}/> Solo per Capitali &gt; 10.000€</h4>
                         <p className="text-sm text-rose-300 mt-2">Modulo ad alto rischio. Usa i prestiti collaterali per estrarre contanti senza vendere gli asset principali che stanno maturando il 10%.</p>
                       </div>
